@@ -1,6 +1,7 @@
 # Resource-free repository (playbook R1): no copied game binaries are EVER
-# committed. The surviving builds live in a private sibling / the j2me home's
-# _resources/ and are materialized into git-ignored _originals/ by fetch.py.
+# committed. The surviving builds live in this game's private binary repo
+# (the j2me home's _resources/<slug>-resources/) and are materialized into
+# git-ignored _originals/ by fetch.py.
 #
 # Match ignored paths BY NAME — no trailing-slash globs — so a stray symlink is
 # covered too (playbook R2 — the stalker _originals symlink hazard).
