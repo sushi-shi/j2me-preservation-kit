@@ -145,10 +145,14 @@ def main(argv: list[str]) -> int:
     src = Path(args.resources).expanduser().resolve()
     if (src / "originals").is_dir():
         src = src / "originals"
+    # --match may be a comma-separated list; a file matches if ANY pattern is a
+    # substring of its name (so one merged game can span several filename stems,
+    # e.g. the Allods/Rage-of-Mages region variants of one Nival codebase).
+    patterns = [m.strip().lower() for m in args.match.split(",") if m.strip()]
     files = sorted(f for f in src.iterdir()
-                   if f.is_file() and args.match.lower() in f.name.lower())
+                   if f.is_file() and any(m in f.name.lower() for m in patterns))
     if not files:
-        sys.exit(f"gen_builds: no files in {src} match {args.match!r}")
+        sys.exit(f"gen_builds: no files in {src} match {patterns!r}")
 
     # Unique jar payloads keyed by sha: aggregate names + container refs.
     payloads: dict[str, dict] = {}
