@@ -1,0 +1,17 @@
+# Provenance authority for the __TITLE__ (J2ME) corpus — SKELETON.
+#
+# This placeholder is replaced by `gen_builds.py` (run automatically by the
+# generator, or via `just gen-builds <resources> <match>`), which deduplicates
+# every unique payload by sha256 and fills in the mechanical fields. See
+# BUILDS_SCHEMA.md for the field reference and playbook R2 for the rules.
+#
+# `just originals-verify` reconciles the materialized _originals against this
+# file; `--self-test` proves the gate can fail.
+
+title = "__TITLE__"
+slug = "__SLUG__"
+fork = "__FORK__"
+baseline = ""            # TODO Phase 1
+naming_reference = ""    # TODO Phase 1
+
+# [[payload]] / [[archived]] / [[container]] rows are generated from the corpus.

@@ -1,0 +1,8 @@
+# Per-game configuration read by the shared originals tooling (verify / fetch /
+# gen_builds). Filled in by new-game.py when this template is stamped.
+slug = "__SLUG__"
+title = "__TITLE__"
+fork = "__FORK__"                      # 2d (Graphics2D) or 3d (M3G); see the
+                                       # j2me home's docs/FORK_2D_3D.md
+resources_env = "__RESOURCES_ENV__"    # env-var fallback for the PRIVATE resources
+                                       # location (never a real path in the repo)
