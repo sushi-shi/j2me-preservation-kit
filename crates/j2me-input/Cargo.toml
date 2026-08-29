@@ -1,0 +1,22 @@
+[package]
+name = "j2me-input"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Generic, remappable native-key to Nokia FullCanvas key-code mapping for J2ME ports"
+readme = "README.md"
+keywords = ["j2me", "midp", "input", "keymap", "winit"]
+categories = ["game-development", "emulators"]
+# NOTE: `rust-version`/`repository`/`homepage` are intentionally NOT inherited
+# from `[workspace.package]`. This crate pulls in `winit` (see below), whose own
+# MSRV is higher than the pure-`core` library crates' shared 1.75; inheriting the
+# workspace MSRV here would misstate it. The other keys are optional and left off
+# so the crate builds even if the workspace-metadata keys are absent.
+
+# `winit` supplies the native host's physical `KeyCode`; this crate is the one
+# place that translates it into the raw Nokia `FullCanvas` code the transliterated
+# `keyPressed(int)` expects. Pinned directly (not via `[workspace.dependencies]`)
+# because it is specific to this crate's native-host path — a WASM/2D client that
+# never opens a winit window simply does not depend on `j2me-input`.
+[dependencies]
+winit = "0.30"
