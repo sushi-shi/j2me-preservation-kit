@@ -21,6 +21,22 @@ def load_runner():
 
 
 class ChangedGateTests(unittest.TestCase):
+    def test_generated_python_caches_do_not_dirty_directory_inputs(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sources = root / "tools"
+            cache = sources / "__pycache__"
+            cache.mkdir(parents=True)
+            source = sources / "validator.py"
+            source.write_text("pass\n", encoding="utf-8")
+            (cache / "validator.cpython-314.pyc").write_bytes(b"first")
+            (sources / "standalone.pyc").write_bytes(b"second")
+
+            files, existed = runner.expand_pattern(root, "tools")
+            self.assertTrue(existed)
+            self.assertEqual(files, [source])
+
     def test_only_changed_successful_fingerprints_are_cached(self):
         runner = load_runner()
         with tempfile.TemporaryDirectory() as temporary:

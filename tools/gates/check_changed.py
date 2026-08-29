@@ -88,6 +88,12 @@ def relative_path(root: Path, path: Path) -> str:
         raise ValueError(f"gate input escapes project root: {path}") from error
 
 
+def is_generated_cache(path: Path) -> bool:
+    """Exclude interpreter caches that commands may create under input trees."""
+
+    return "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}
+
+
 def expand_pattern(root: Path, pattern: str) -> tuple[list[Path], bool]:
     candidate = Path(pattern)
     if candidate.is_absolute() or ".." in candidate.parts:
@@ -104,9 +110,10 @@ def expand_pattern(root: Path, pattern: str) -> tuple[list[Path], bool]:
             files.update(
                 child
                 for child in match.rglob("*")
-                if child.is_file() or child.is_symlink()
+                if (child.is_file() or child.is_symlink())
+                and not is_generated_cache(child)
             )
-        else:
+        elif not is_generated_cache(match):
             files.add(match)
     return sorted(files), existed
 
