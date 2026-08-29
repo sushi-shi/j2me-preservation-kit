@@ -1,17 +1,107 @@
-# Three-authority AST audit
+# Per-node Java/Rust AST crosswalk
 
-The reusable audit has three pieces:
+Three pieces turn "the transliteration is verified" into something a machine can
+enforce, node by node:
 
 - `JavaAstAuditDump.java` emits formatting-independent `javac` AST items and a
-  stable pre-order node list, including field and initializer structure.
-- `j2me-ast-audit` emits formatting-independent `syn` AST items and semantic
-  body/declaration nodes, including statement-position macros.
-- `validate_crosswalk.py` validates a game manifest in which original bytecode
-  and opcode hashes, complete Java/Rust AST hashes, and semantic node ranges are
-  recorded. Every Java and Rust node must have exactly one owner.
+  stable pre-order node inventory (`KIND\tdetail` per line), including fields and
+  initializers.
+- `j2me-ast-audit` emits formatting-independent `syn` AST items and the matching
+  pre-order body/declaration node inventory, including statement-position macros.
+- `validate_crosswalk.py` is the generic verifier. It reads a **manifest** of
+  reviewer decisions + locked digests and an **evidence** table (what the live
+  emitters/classfile reader currently produce), and enforces that **every** Java
+  node and **every** Rust node carries its own explicit decision and comment.
 
-The validator is intentionally manifest-driven. A per-game wrapper is still
-responsible for extracting the original classfile denominator, selecting exact
-source/Rust items, recomputing every stored hash, and proving reverse ownership
-of every production Rust declaration. Do not turn this generic validator into a
-substitute for those authority checks.
+## Why per-node
+
+A crosswalk that pairs whole bodies proves almost nothing. Gothic's coarse audit
+mapped 365 of 429 bodies entirely-Java-to-entirely-Rust under one blanket
+"operation", and a real bug survived it (`paint_radio_row`: the Rust computed
+`sprite_meta[1717*11+1721]` via the flat `sm(..)` accessor where the bytecode is
+the *ratio* `sprite_meta[1717] / sprite_meta[1721]`). Under one blanket nobody had
+to pair that single Rust call node against the Java `array-index / array-index /
+DIVIDE` nodes, so the divergence was invisible.
+
+## The contract (all can-fail proven)
+
+1. **Exhaustive per-node coverage.** Every Java node and every Rust node is
+   decided exactly once; undecided nodes are counted and, under `--strict`, fatal.
+   A body is only `crosswalked` when nothing is undecided.
+2. **Coarse-blanket rejection.** A single paired `op` may not span more than
+   `policy.blanket_max_span` (default 48) nodes on either side — a whole-body
+   blanket is rejected and must be decomposed into atomic steps.
+3. **Atomic operator-realization parity.** Inside a paired `op`, a Java `DIVIDE` /
+   `REMAINDER` / shift must be realized on the Rust side (`a / b` or the sanctioned
+   `java_div` / `java_rem` / `wrapping_shl` helper). A Java division paired against
+   a bare `sm(..)` call — the exact gothic bug — is red.
+4. **Hash locks.** The bytecode Code-attribute digest, the full javac AST digest,
+   each syn AST digest, and the pre-order node-inventory digests are all locked;
+   a one-node drift breaks a lock.
+
+## Manifest shape (schema 2)
+
+```toml
+schema_version = 2
+total_body_count = <all bytecode bodies>
+reviewed_body_count = <len(body)>
+crosswalked_body_count = <bodies fully decided + semantic_status = "crosswalked">
+
+[policy]
+blanket_max_span = 48
+
+[[body]]
+java_item = "paint_radio_row(...)"
+code_sha256 = "..."          # authoritative bytecode Code-attr (wrapper recomputes)
+opcode_sha256 = "..."
+java_ast_sha256 = "..."
+java_nodes_sha256 = "..."
+java_node_count = 71
+semantic_status = "crosswalked"
+review = "human prose"
+rust = [
+  { file = "…/shell_paint.rs", item = "fn:paint_radio_row",
+    ast_sha256 = "…", nodes_sha256 = "…", node_count = 66 },
+]
+op = [
+  # one semantically-atomic step; java/rust name the exact node indices (or ranges)
+  { semantic = "icon = c.b[1717] / c.b[1721] — RATIO (idiv)",
+    java_range = [[31, 40]], rust_range = [{ target = 0, start = 33, end = 41 }] },
+  # …one op per atomic step…
+]
+adapt = [
+  # the only legal one-sided nodes; each categorized + reasoned
+  { category = "representation-adapter", reason = "hoisted local",
+    rust_range = [{ target = 0, start = 42, end = 43 }] },
+  { category = "erased", reason = "javac `+ 0` no-op the port elides",
+    java = [62, 66] },
+]
+```
+
+Node references: a Java node is a bare index; a Rust node is `"target:index"`.
+Contiguous atomic steps may use `java_range = [[a,b]]` / `rust_range = [{ target,
+start, end }]`; the blanket cap still applies to the resulting node count.
+`op.shape_note` is the explicit escape hatch for a legitimate cross-language
+representation where the operator parity would otherwise fire; `op.blanket_ok` +
+`op.blanket_reason` similarly justifies a rare genuinely-large atomic step.
+
+## Running it
+
+```sh
+python3 tools/ast/validate_crosswalk.py MANIFEST --evidence EVIDENCE [--strict] [--coverage]
+python3 tools/ast/validate_crosswalk.py --self-test          # prove it can fail
+```
+
+`fixtures/` holds a self-contained `paint_radio_row` reproduction:
+`paint_radio_row.crosswalk.toml` (fine, green), `.coarse.toml` (whole-body blanket
+→ red), `.buggy.toml` (the div-vs-`sm()` shape → red), and `.evidence.toml`. It is
+regenerated by `fixtures/gen_fixture.py`.
+
+## Port responsibility
+
+The verifier is deliberately evidence-driven. A per-game wrapper is still
+responsible for extracting the original classfile Code-attribute digests,
+selecting exact source/Rust items, emitting live evidence through the two
+emitters, recomputing every digest, and proving reverse ownership of every
+production Rust declaration. See `docs/CROSSWALK_MIGRATION.md` for how a port on
+the old coarse-operation format adopts this schema.

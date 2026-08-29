@@ -38,7 +38,9 @@ inputs = [
 ]
 commands = [
   ["just", "oracle-harness-canfail"],
-  ["just", "crosswalk-validator-canfail"],
+  ["just", "crosswalk-check"],
+  ["just", "crosswalk-canfail"],
+  ["just", "crosswalk-fixture-canfail"],
 ]
 
 [[gate]]

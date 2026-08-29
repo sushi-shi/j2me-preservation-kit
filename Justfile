@@ -28,9 +28,32 @@ codec-no-std:
 oracle-harness-canfail:
     python3 -m unittest tools.tests.test_line_oracle.LineOracleTests.test_two_independent_processes_match_and_self_test_bites
 
-# Prove exhaustive AST ownership rejects duplicate and uncovered nodes.
-crosswalk-validator-canfail:
-    python3 -m unittest tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_duplicate_and_uncovered_nodes_fail
+# Per-node AST crosswalk verifier. Every Java and Rust node must carry its own
+# explicit decision + comment; no operation may blanket a whole body. Runs the
+# generic verifier over the shipped paint_radio_row fixture in --strict mode (a
+# port repoints these at its own method-audit manifest + live-emitted evidence).
+crosswalk-check:
+    python3 tools/ast/validate_crosswalk.py \
+        tools/ast/fixtures/paint_radio_row.crosswalk.toml \
+        --evidence tools/ast/fixtures/paint_radio_row.evidence.toml --strict
+
+# Live "how much is still unchecked" report: decided/total nodes per body.
+crosswalk-coverage:
+    python3 tools/ast/validate_crosswalk.py \
+        tools/ast/fixtures/paint_radio_row.crosswalk.toml \
+        --evidence tools/ast/fixtures/paint_radio_row.evidence.toml --coverage
+
+# Prove the crosswalk gate can fail (playbook R3): dropped decision, coarse
+# blanket, and bytecode/Java-AST/Rust-AST digest perturbations each go red, and a
+# one-node evidence drift breaks the node-inventory lock. Must exit 0.
+crosswalk-canfail:
+    python3 tools/ast/validate_crosswalk.py --self-test
+
+# Prove the fixture's coarse-blanket and div-vs-call bug rows go red as recorded.
+crosswalk-fixture-canfail:
+    python3 -m unittest \
+        tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_coarse_blanket_is_rejected \
+        tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_operator_parity_catches_div_vs_call
 
 # Regenerate builds.toml provenance from a resources dir (mechanical facts only;
 # the judgment calls stay flagged for Phase 1 — see the file header).
@@ -68,7 +91,9 @@ check:
     just originals-verify-canfail
     just codec-no-std
     just oracle-harness-canfail
-    just crosswalk-validator-canfail
+    just crosswalk-check
+    just crosswalk-canfail
+    just crosswalk-fixture-canfail
     if [ -d tools/tests ]; then python3 -m unittest discover -s tools/tests; fi
     if [ -f Cargo.toml ]; then cargo fmt --all --check; fi
     if [ -f Cargo.toml ]; then cargo clippy --workspace --all-targets -- -D warnings; fi
