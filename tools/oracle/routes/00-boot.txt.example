@@ -1,0 +1,41 @@
+# EXAMPLE route -- rename to `00-boot.txt` (drop `.example`) and edit for this game.
+#
+# Routes are PER-GAME: the capture script globs `tools/oracle/routes/*.txt`, so a
+# `.example` file is deliberately ignored until you rename it. A new port writes
+# its own routes; this file only documents the shared format so both runtimes --
+# FreeJ2ME-Plus (via HeadlessCapture.java) and the future Rust port (via its own
+# `--script`) -- can be driven by the SAME keystrokes. See routes/README.md for
+# the full command reference, and the header of HeadlessCapture.java for the
+# authoritative grammar.
+#
+# One command per line; `#` starts a comment. Every command may carry trailing
+# `key=value` tokens; a consumer ignores keys it does not know (that is how one
+# file feeds the emulator driver, the Rust port, and compare_frames.py at once).
+#
+# Determinism: `fps <n>` switches the reference driver to gated frame stepping on
+# FreeJ2ME's substituted clock, so game time advances by each command's exact
+# millisecond budget rather than by host wall time. `seed <n>` reseeds every
+# loaded game java.util.Random in place, pinning any RNG-driven animation before
+# the shot that must be reproducible. Both are no-ops for RNG-free screens but
+# harmless to leave in.
+
+fps 20
+seed 305419896
+
+# `wait` advances time without input. `java_frames=` is the reference's unit and
+# `java_ms=` its game-time budget; the Rust port reads `frames=`/`settle_frames=`.
+wait java_frames=40 java_ms=2000
+shot boot-first-screen
+
+wait java_frames=60 java_ms=3000
+seed 305419896
+shot boot-title
+
+# `tap <KEY> [hold_ms] [settle_ms]` presses, holds, releases, then settles.
+# Keys: UP DOWN LEFT RIGHT FIRE SOFT1 SOFT2 SEND END STAR POUND NUM0..NUM9.
+tap SOFT1 60 2500 java_frames=1 java_settle_frames=60
+shot main-menu
+
+# Each `shot <label>` writes <label>.png; compare_frames.py pairs frames by label
+# across the reference and the port, and compares them EXACTLY (0 pixels differ is
+# the only clean state). Every label must also appear in agreement.toml.

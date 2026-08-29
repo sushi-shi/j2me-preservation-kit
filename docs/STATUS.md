@@ -13,6 +13,18 @@ Living record of what is recovered and verified. Newest first.
   flagged for Phase 1.
 - `tools/originals/{verify,fetch,gen_builds}.py`: the `originals-verify` gate is
   **proven able to fail** (`just originals-verify-canfail`).
+- The generic Phase-3 support is already present: JVM arithmetic/errors/clock,
+  neutral ARGB images, MIDP Graphics/Canvas/MMAPI/RMS state, a line-protocol
+  differential oracle, complete `javac`/`syn` walkers, and an exhaustive node
+  ownership validator. Only `j2me-codec` is constrained to `no_std`; device and
+  transliteration crates use ordinary Rust.
+- `transliteration/game-xlat` deliberately claims zero recovered methods. Each
+  admitted game body must add bytecode/opcode hashes, complete Java/Rust AST
+  ownership, semantic adaptations, and live oracle evidence.
+- Select bodies only after joining the canonical owner/signature to a real
+  original classfile method. Route source-only `ConstantValue` initializer ASTs
+  to declaration coverage, and represent every unreviewed callee through an
+  explicit callback/adapter boundary so wrapper coverage cannot absorb it.
 - Fork: **__FORK__** (see the j2me home's `docs/FORK_2D_3D.md`).
 
 ## Difficulty tier & recommended first phases

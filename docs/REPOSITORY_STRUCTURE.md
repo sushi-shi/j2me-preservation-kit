@@ -18,8 +18,12 @@ literal copied binaries. See the j2me home's `PLAYBOOK.md` for the method.
 ## Boundary rules (fill in as phases land)
 
 - The root `Cargo.toml` is the only workspace manifest; one `target/`, one lock.
-- `transliteration/` (Phase 3) is an executable spec, not the shipped engine —
-  production code must not depend on it at runtime; tests may (R12).
+- `crates/j2me-{jvm,canvas,me}` are the shared, ordinary-`std` implementation
+  copied from the home template. `crates/j2me-codec` is the deliberately
+  `no_std` serialization layer.
+- `transliteration/game-xlat` (Phase 3) is the per-game executable spec, not the
+  shipped engine — production code must not depend on it at runtime; tests may
+  (R12). Transliteration is not constrained to `no_std`.
 - `crates/` holds the shipped engine libraries (2D or 3D per `game.toml`'s
   `fork`); `apps/` the frontends; `web/` page composition only.
 - Repository-owned ignored directories begin with `_`; `.gitignore` matches them
@@ -32,10 +36,10 @@ literal copied binaries. See the j2me home's `PLAYBOOK.md` for the method.
 _originals/            immutable surviving jars/zips (git-ignored, sha256-verified)
 _reference/            generated catalogs & fingerprints (git-ignored, regenerable)
 java/reconstruction/   builds.toml (provenance), symbols.toml, variants — ledgers
-transliteration/       *-jvm, *-me device runtime, *-game-xlat, host, oracle crate
-crates/                *-formats, *-content, *-engine, *-present, *-audio
+transliteration/       per-game game-xlat executable spec and adapters
+crates/                reusable j2me-codec/jvm/canvas/me + game engine crates
 apps/                  native desktop host, play/site exporters, web frontend
-tools/                 originals/, corpus/, java/, transliteration/ workflows
+tools/                 originals/, AST walkers/crosswalk, line oracle, workflows
 docs/                  REPOSITORY_STRUCTURE, GATES, FORMATS, STATUS (+ more)
 game.toml, Justfile, flake.nix, Cargo.toml
 ```

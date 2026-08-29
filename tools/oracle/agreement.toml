@@ -1,0 +1,25 @@
+# Per-label EXACT agreement between FreeJ2ME-Plus (reference) and this port.
+#
+# SCAFFOLD -- this file is empty until the game writes its routes and captures a
+# port. `tools/oracle/compare_frames.py` reads and writes it:
+#
+#   * `compare_frames.py --self-test`      proves the oracle bites (no port needed;
+#                                          does not touch this file)
+#   * `compare_frames.py`                  compares the port against the reference,
+#                                          FAILING on any label missing from here
+#   * `compare_frames.py --update-ratchet` records the current agreement, and only
+#                                          after you have looked at every diff image
+#
+# A run fails on a regression AND on an unrecorded improvement, so a number here
+# can only move deliberately. NEVER raise one to make a change pass.
+#
+# Every label is `2d`: `differing_pixels = 0` is the only clean state, and any
+# other value is a recorded defect, not a tolerance. `verdict = port-missing`
+# means the port has not been captured for that label yet. One `[shots."<route>/<label>"]`
+# table per `shot` line across all routes; the file below is intentionally empty.
+#
+# Example of a generated entry (delete this comment block's example before use):
+#
+#   [shots."00-boot/main-menu"]
+#   layer = "2d"
+#   verdict = "port-missing"

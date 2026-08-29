@@ -1,0 +1,51 @@
+diff --git a/src/org/recompile/mobile/MIDletEnhancements.java b/src/org/recompile/mobile/MIDletEnhancements.java
+--- a/src/org/recompile/mobile/MIDletEnhancements.java
++++ b/src/org/recompile/mobile/MIDletEnhancements.java
+@@ -23,7 +23,8 @@ public class MIDletEnhancements
+     private static final AtomicLong curTimeMillis = new AtomicLong(0);
+     private static long lastNanoTime = System.nanoTime();
+     private static long lastMillisTime = System.currentTimeMillis();
++    private static volatile boolean deterministicClock = false;
+ 
+     // Simulated time will start from the current system time, for better compatibility
+     private static final long startMillisTime = lastMillisTime;
+     private static final long startNanoTime = lastNanoTime;
+@@ -38,10 +39,31 @@ public class MIDletEnhancements
+     public static void sleep(long millis) throws InterruptedException
+     {
+         if (Mobile.unlockFramerateHack == 0 && !MobilePlatform.pressedKeys[20]) { Thread.sleep(millis); } 
+         else { Thread.sleep(1); }
+     }
+ 
++    /* Headless differential-capture hook. Disabled for every normal frontend. */
++    public static synchronized void enableDeterministicClock()
++    {
++        if (deterministicClock) { return; }
++        long nowMillis = System.currentTimeMillis();
++        long nowNanos = System.nanoTime();
++        curTimeMillis.addAndGet(nowMillis - lastMillisTime);
++        curNanoTime.addAndGet(nowNanos - lastNanoTime);
++        lastMillisTime = nowMillis;
++        lastNanoTime = nowNanos;
++        deterministicClock = true;
++    }
++
++    public static void advanceDeterministicClock(long millis)
++    {
++        if (!deterministicClock) { throw new IllegalStateException("deterministic clock is disabled"); }
++        curTimeMillis.addAndGet(millis);
++        curNanoTime.addAndGet(millis * 1000000L);
++    }
++
+     public static long currentTimeMillis() 
+     {
++        if (deterministicClock) { return startMillisTime + curTimeMillis.get(); }
+         long now = System.currentTimeMillis();
+         long elapsedMillis = now - lastMillisTime;
+@@ -62,5 +84,6 @@ public class MIDletEnhancements
+     public static long nanoTime() 
+     {
++        if (deterministicClock) { return startNanoTime + curNanoTime.get(); }
+         long now = System.nanoTime();
+         long elapsedNanos = now - lastNanoTime;
+ 

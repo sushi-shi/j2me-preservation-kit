@@ -1,0 +1,14 @@
+[package]
+name = "j2me-me"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Reusable Java ME/MIDP device-runtime core for strict transliterations"
+publish = false
+
+[dependencies]
+j2me-canvas = { path = "../j2me-canvas" }
+j2me-jvm = { path = "../j2me-jvm" }
+# `png` backs the device runtime's `Image.createImage(byte[])` / `createImage(String)`
+# decode factories (`image` module). Pure-Rust, no C codec.
+png = { workspace = true }

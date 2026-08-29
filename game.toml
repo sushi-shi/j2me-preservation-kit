@@ -6,3 +6,29 @@ fork = "__FORK__"                      # 2d (Graphics2D) or 3d (M3G); see the
                                        # j2me home's docs/FORK_2D_3D.md
 resources_env = "__RESOURCES_ENV__"    # env-var fallback for the PRIVATE resources
                                        # location (never a real path in the repo)
+
+# ---------------------------------------------------------------------------
+# [oracle] — the ONLY per-game knobs of the FreeJ2ME-Plus reference frame oracle
+# (tools/oracle/{capture_reference.sh, HeadlessCapture.java, compare_frames.py}).
+# The capture script and comparator read every value from here, so the scripts
+# themselves carry no game-specific literal and stamp into a new 2D J2ME port
+# unchanged. FILL THESE IN before running the frame oracle (2D games only); see
+# tools/oracle/README.md and the home docs/ (ARITHMETIC_AND_RUNTIME.md, the
+# oracle chapter). new-game.py does NOT auto-fill this section.
+# ---------------------------------------------------------------------------
+[oracle]
+jar = "_originals/TODO-pinned-build.jar"   # TODO: pinned JAR, relative to repo root
+                                           #   (the build the reconstruction targets)
+canvas_w = 240                 # TODO: reference canvas width the port targets
+canvas_h = 320                 # TODO: reference canvas height (the MIDlet's default)
+sound = 0                      # HeadlessCapture --sound flag (0/1). Set 1 only if the
+                               #   game's loader deadlocks on a white screen with sound
+                               #   OFF (some games' audio thread must stay alive to boot).
+# FreeJ2ME-Plus patches to apply, by descriptive name, resolved under
+# tools/oracle/patches/freej2me-plus-<name>.patch (applied in listed order). The
+# two shipped here are the game-agnostic non-M3G determinism hooks; a 2D game
+# typically wants both, and needs no M3G patches. An empty list [] is valid.
+patches = ["deterministic-clock", "deterministic-input"]
+freej2me_commit = "TODO"       # TODO: pin the FreeJ2ME-Plus revision so a rerun
+                               #   reproduces these captures (bump deliberately)
+# freej2me_repo = "https://github.com/TASEmulators/freej2me-plus.git"  # optional override

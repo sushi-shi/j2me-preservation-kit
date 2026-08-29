@@ -1,0 +1,11 @@
+[package]
+name = "j2me-ast-audit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Formatting-independent syn AST emitter for J2ME transliteration audits"
+publish = false
+
+[dependencies]
+quote.workspace = true
+syn.workspace = true

@@ -1,0 +1,9 @@
+[package]
+name = "j2me-jvm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Reusable JVM primitive semantics for strict J2ME transliterations"
+publish = false
+
+[dependencies]

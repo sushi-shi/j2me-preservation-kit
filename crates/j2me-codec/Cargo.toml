@@ -1,0 +1,11 @@
+[package]
+name = "j2me-codec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "no_std bounded readers for recovered J2ME serialization formats"
+publish = false
+
+[features]
+default = []
+std = []

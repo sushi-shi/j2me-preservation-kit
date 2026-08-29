@@ -20,6 +20,18 @@ originals-verify:
 originals-verify-canfail:
     python3 tools/originals/verify.py --self-test
 
+# Serialization/format primitives are the deliberately portable no_std layer.
+codec-no-std:
+    cargo check -p j2me-codec --no-default-features
+
+# Prove the reusable line oracle detects one injected observation mismatch.
+oracle-harness-canfail:
+    python3 -m unittest tools.tests.test_line_oracle.LineOracleTests.test_two_independent_processes_match_and_self_test_bites
+
+# Prove exhaustive AST ownership rejects duplicate and uncovered nodes.
+crosswalk-validator-canfail:
+    python3 -m unittest tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_duplicate_and_uncovered_nodes_fail
+
 # Regenerate builds.toml provenance from a resources dir (mechanical facts only;
 # the judgment calls stay flagged for Phase 1 — see the file header).
 gen-builds resources match:
@@ -31,6 +43,20 @@ gen-builds resources match:
 
 # --- Test batteries ----------------------------------------------------------
 
+# Content-address every gate's declared inputs and run only groups whose exact
+# fingerprint has not passed before. Git cleanliness is deliberately irrelevant.
+check-affected:
+    python3 tools/gates/check_changed.py
+
+# Explain the hash-selected groups and commands without executing them.
+check-affected-dry:
+    python3 tools/gates/check_changed.py --dry-run
+
+# Keep the same hash router active while editing; a changed input reruns its
+# dependent groups after a short debounce.
+watch-affected interval="0.5":
+    python3 tools/gates/check_changed.py --watch --interval {{quote(interval)}}
+
 test:
     if [ -d tools/tests ]; then python3 -m unittest discover -s tools/tests; fi
     if [ -f Cargo.toml ]; then cargo test --workspace; fi
@@ -40,7 +66,11 @@ test:
 check:
     just originals-verify
     just originals-verify-canfail
+    just codec-no-std
+    just oracle-harness-canfail
+    just crosswalk-validator-canfail
     if [ -d tools/tests ]; then python3 -m unittest discover -s tools/tests; fi
     if [ -f Cargo.toml ]; then cargo fmt --all --check; fi
     if [ -f Cargo.toml ]; then cargo clippy --workspace --all-targets -- -D warnings; fi
     if [ -f Cargo.toml ]; then cargo test --workspace; fi
+    python3 tools/gates/check_changed.py --record-all

@@ -13,6 +13,19 @@ row when you add a gate.
 | Gate | Command | Can-fail proof |
 | --- | --- | --- |
 | Originals provenance | `just originals-verify` | `just originals-verify-canfail` (proven RED on a one-byte payload corruption) |
+| Codec remains `no_std` | `just codec-no-std` | The crate is compiled with default features disabled; filesystem/runtime code is outside its dependency graph. |
+| Generic line oracle | `python3 -m unittest tools.tests.test_line_oracle` | `just oracle-harness-canfail` runs two independent processes, injects one changed observation, and requires exactly one mismatch. |
+| Exhaustive AST ownership | `python3 -m unittest tools.tests.test_crosswalk_validator` | `just crosswalk-validator-canfail` injects duplicate ownership and also verifies uncovered nodes are rejected. |
+
+## Content-addressed affected-gate loop
+
+`just check-affected` hashes the inputs declared for each group in
+`tools/gates/gates.toml` and executes only fingerprints that have not already
+passed. `just watch-affected` watches the same dependency surface and reruns a
+group after an ordinary file create/write/remove changes that surface. Failed
+fingerprints are never cached. The router is an iteration accelerator, not a
+replacement for `just check`: the full battery still runs at milestones and at
+completion, then records all successful current fingerprints.
 
 ## Rules (restated)
 

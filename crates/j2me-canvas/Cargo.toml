@@ -1,0 +1,9 @@
+[package]
+name = "j2me-canvas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Reusable neutral ARGB image buffer for J2ME ports"
+publish = false
+
+[dependencies]

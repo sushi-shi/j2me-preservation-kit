@@ -1,0 +1,59 @@
+schema_version = 1
+project_root = "../.."
+state_file = "target/gates/affected-state.json"
+
+[[gate]]
+name = "originals"
+description = "Surviving binaries or provenance changed."
+inputs = [
+  "_originals",
+  "java/reconstruction/builds.toml",
+  "tools/originals/**/*.py",
+]
+commands = [
+  ["just", "originals-verify"],
+  ["just", "originals-verify-canfail"],
+]
+
+[[gate]]
+name = "codec-no-std"
+description = "The deliberately portable serialization layer changed."
+inputs = [
+  "Cargo.toml",
+  "Cargo.lock",
+  "crates/j2me-codec/Cargo.toml",
+  "crates/j2me-codec/src/**/*.rs",
+]
+commands = [
+  ["just", "codec-no-std"],
+]
+
+[[gate]]
+name = "oracle-ast-harnesses"
+description = "Reusable oracle or exhaustive AST ownership tooling changed."
+inputs = [
+  "tools/oracle",
+  "tools/ast",
+  "tools/tests",
+]
+commands = [
+  ["just", "oracle-harness-canfail"],
+  ["just", "crosswalk-validator-canfail"],
+]
+
+[[gate]]
+name = "rust"
+description = "Reusable Rust runtime or transliteration scaffold changed."
+inputs = [
+  "Cargo.toml",
+  "Cargo.lock",
+  "crates/**/*.toml",
+  "crates/**/*.rs",
+  "transliteration/**/*.toml",
+  "transliteration/**/*.rs",
+]
+commands = [
+  ["cargo", "fmt", "--all", "--check"],
+  ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"],
+  ["cargo", "test", "--workspace"],
+]

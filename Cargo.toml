@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/j2me-canvas",
+    "crates/j2me-codec",
+    "crates/j2me-jvm",
+    "crates/j2me-me",
+    "transliteration/game-xlat",
+    "tools/ast/j2me-ast-audit",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "CC0-1.0"
+
+[workspace.dependencies]
+quote = "1"
+syn = { version = "2", features = ["full", "visit"] }
+# `png` decodes sprite/font PNGs to ARGB inside the device runtime's MIDP
+# `Image.createImage(byte[])` factory (`j2me-me::image`). Pure-Rust, no C codec.
+png = "0.17"
+
+[profile.dev]
+overflow-checks = true
+
+[profile.release]
+opt-level = 3
