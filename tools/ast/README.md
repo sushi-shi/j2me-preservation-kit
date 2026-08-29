@@ -33,8 +33,8 @@ DIVIDE` nodes, so the divergence was invisible.
    blanket is rejected and must be decomposed into atomic steps.
 3. **Atomic operator-realization parity.** Inside a paired `op`, a Java `DIVIDE` /
    `REMAINDER` / shift must be realized on the Rust side (`a / b` or the sanctioned
-   `java_div` / `java_rem` / `wrapping_shl` helper). A Java division paired against
-   a bare `sm(..)` call — the exact gothic bug — is red.
+   `j2me-jvm` div/rem/signed-shift/unsigned-shift helper families). A Java
+   division paired against a bare `sm(..)` call — the exact gothic bug — is red.
 4. **Hash locks.** The bytecode Code-attribute digest, the full javac AST digest,
    each syn AST digest, and the pre-order node-inventory digests are all locked;
    a one-node drift breaks a lock.

@@ -116,6 +116,66 @@ class CrosswalkValidatorTests(unittest.TestCase):
             report.errors,
         )
 
+    def test_every_shipped_jvm_operator_helper_is_a_realization(self) -> None:
+        helpers = (
+            ("DIVIDE", "java_div"),
+            ("DIVIDE", "java_ldiv"),
+            ("DIVIDE", "i32_div"),
+            ("DIVIDE", "i64_div"),
+            ("REMAINDER", "java_rem"),
+            ("REMAINDER", "java_lrem"),
+            ("REMAINDER", "i32_rem"),
+            ("REMAINDER", "i64_rem"),
+            ("LEFT_SHIFT", "wrapping_shl"),
+            ("LEFT_SHIFT", "i32_shl"),
+            ("LEFT_SHIFT", "i64_shl"),
+            ("LEFT_SHIFT", "ishl"),
+            ("LEFT_SHIFT", "lshl"),
+            ("RIGHT_SHIFT", "wrapping_shr"),
+            ("RIGHT_SHIFT", "i32_shr"),
+            ("RIGHT_SHIFT", "i64_shr"),
+            ("RIGHT_SHIFT", "ishr"),
+            ("RIGHT_SHIFT", "lshr"),
+            ("UNSIGNED_RIGHT_SHIFT", "i32_ushr"),
+            ("UNSIGNED_RIGHT_SHIFT", "i64_ushr"),
+            ("UNSIGNED_RIGHT_SHIFT", "iushr"),
+            ("UNSIGNED_RIGHT_SHIFT", "lushr"),
+        )
+        for java_kind, helper in helpers:
+            with self.subTest(java_kind=java_kind, helper=helper):
+                manifest, evidence = _synthetic()
+                java_nodes = evidence["body"][0]["java_nodes"]
+                rust_nodes = evidence["body"][0]["rust"][0]["nodes"]
+                java_nodes[1] = f"{java_kind}\t"
+                rust_nodes[2] = f"PATH_EXPR\tj2me_jvm :: {helper}"
+                manifest["body"][0]["java_nodes_sha256"] = node_inventory_digest(
+                    java_nodes
+                )
+                manifest["body"][0]["rust"][0]["nodes_sha256"] = (
+                    node_inventory_digest(rust_nodes)
+                )
+                report = validate(manifest, load_evidence(evidence), strict=True)
+                self.assertEqual(report.errors, [])
+
+    def test_signed_shift_helper_cannot_realize_unsigned_shift(self) -> None:
+        manifest, evidence = _synthetic()
+        java_nodes = evidence["body"][0]["java_nodes"]
+        rust_nodes = evidence["body"][0]["rust"][0]["nodes"]
+        java_nodes[1] = "UNSIGNED_RIGHT_SHIFT\t"
+        rust_nodes[2] = "PATH_EXPR\tj2me_jvm :: i32_shr"
+        manifest["body"][0]["java_nodes_sha256"] = node_inventory_digest(java_nodes)
+        manifest["body"][0]["rust"][0]["nodes_sha256"] = node_inventory_digest(
+            rust_nodes
+        )
+        report = validate(manifest, load_evidence(evidence), strict=True)
+        self.assertTrue(
+            any(
+                "Java UNSIGNED_RIGHT_SHIFT with no Rust realization" in error
+                for error in report.errors
+            ),
+            report.errors,
+        )
+
     def test_undecided_nodes_are_counted_and_body_partial(self) -> None:
         manifest, evidence = _synthetic()
         manifest["body"][0]["op"] = []  # remove the only decision

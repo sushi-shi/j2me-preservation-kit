@@ -82,11 +82,26 @@ ADAPT_CATEGORIES = frozenset(
 # and the sanctioned Rust spellings (per docs/TRANSLITERATION.md) that realize
 # them. A bare operator OR the named helper both count.
 DEFAULT_MUST_REALIZE = {
-    "DIVIDE": (r"BINARY\t/", ("java_div", "java_ldiv")),
-    "REMAINDER": (r"BINARY\t%", ("java_rem", "java_lrem")),
-    "LEFT_SHIFT": (r"BINARY\t<<", ("wrapping_shl",)),
-    "RIGHT_SHIFT": (r"BINARY\t>>", ("wrapping_shr",)),
-    "UNSIGNED_RIGHT_SHIFT": (r"BINARY\t>>", ("wrapping_shr",)),
+    "DIVIDE": (
+        r"BINARY\t/",
+        ("java_div", "java_ldiv", "i32_div", "i64_div"),
+    ),
+    "REMAINDER": (
+        r"BINARY\t%",
+        ("java_rem", "java_lrem", "i32_rem", "i64_rem"),
+    ),
+    "LEFT_SHIFT": (
+        r"BINARY\t<<",
+        ("wrapping_shl", "i32_shl", "i64_shl", "ishl", "lshl"),
+    ),
+    "RIGHT_SHIFT": (
+        r"BINARY\t>>",
+        ("wrapping_shr", "i32_shr", "i64_shr", "ishr", "lshr"),
+    ),
+    "UNSIGNED_RIGHT_SHIFT": (
+        r"BINARY\t>>",
+        ("i32_ushr", "i64_ushr", "iushr", "lushr"),
+    ),
 }
 
 DEFAULT_BLANKET_MAX_SPAN = 48

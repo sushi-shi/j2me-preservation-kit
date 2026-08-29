@@ -43,10 +43,11 @@ categorized one-sided adaptation.
    / `rust` indices name the nodes that implement it on each side. Keep each op to
    a single step — if you are tempted to write "and then… and then…", split it.
 3. **Watch the operator parity.** When a step contains a `/`, `%`, or shift on the
-   Java side, confirm the paired Rust nodes actually realize it (`a / b`,
-   `java_div`, `wrapping_shl`, …). This is where `paint_radio_row` broke: a
-   division paired against a bare `sm(..)` call now fails the gate. If the
-   realization genuinely lives in a called helper, cite it in `op.shape_note`.
+   Java side, confirm the paired Rust nodes actually realize it (`a / b` or an
+   audited `j2me-jvm` helper such as `i32_div`, `i64_rem`, `i32_shl`, or
+   `i64_ushr`). This is where `paint_radio_row` broke: a division paired against
+   a bare `sm(..)` call now fails the gate. Cite `op.shape_note` only for a
+   representation the verifier cannot derive from those known helpers.
 4. **Categorize every one-sided node.** A Rust-only host/representation adapter or
    a Java-only erased/no-op node goes in `adapt` with a category and a reason.
 5. **Lock the digests.** Record `code_sha256`, `opcode_sha256`, `java_ast_sha256`,
