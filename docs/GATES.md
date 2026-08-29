@@ -27,6 +27,14 @@ fingerprints are never cached. The router is an iteration accelerator, not a
 replacement for `just check`: the full battery still runs at milestones and at
 completion, then records all successful current fingerprints.
 
+Declare every file a gate reads, including transitive authority and ratchet
+inputs that are not named on its command line. For example, if an AST-authority
+validator reads the method-audit manifest to compare its admitted-body count,
+that manifest belongs in the AST gate's `inputs` as well as in the method-audit
+gate. Otherwise a method-only edit can reuse a stale successful fingerprint.
+When a full or newly triggered gate exposes such an omission, fix the dependency
+manifest before recording the new fingerprint.
+
 ## Rules (restated)
 
 1. Every gate ships with a can-fail proof (`--self-test` / an in-test negative
