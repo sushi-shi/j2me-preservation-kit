@@ -36,7 +36,12 @@ The teeth (each proven can-fail by ``--self-test``)
    / ``REMAINDER`` / shift must be realized on the Rust side (``a / b`` or the
    sanctioned ``java_div`` / ``java_rem`` / ``wrapping_shl`` helper). A Java
    division paired against a bare ``sm(..)`` call — the exact gothic bug — is red.
-4. Hash locks — the authoritative bytecode Code-attribute digest, the full javac
+4. Literal / index parity — inside a paired ``op``, the numeric constants each
+   side carries (index literals, integer/char literals, numeric arguments) must be
+   equal in value (hex/decimal/suffix forms normalized). A Rust ``entity_row[13]``
+   paired against the faithful Java ``[10]`` — the build_dialogue_menu crash — is
+   red unless documented in ``literal_note`` / ``shape_note``.
+5. Hash locks — the authoritative bytecode Code-attribute digest, the full javac
    AST digest, each syn AST digest, and the pre-order node-inventory digests are
    all recorded and re-derived from live evidence; a one-node drift breaks a lock.
 
@@ -58,11 +63,27 @@ import hashlib
 import re
 import sys
 import tomllib
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 HEX64 = re.compile(r"[0-9a-f]{64}")
+
+# Rust integer-literal type suffix (13i32, 255u8, …), stripped before parsing.
+RUST_INT_SUFFIX = re.compile(
+    r"(?:i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize)$"
+)
+# Common Rust char escapes, mapped to their code point for value comparison.
+RUST_CHAR_ESCAPES = {
+    "\\n": 10,
+    "\\t": 9,
+    "\\r": 13,
+    "\\0": 0,
+    "\\\\": 92,
+    "\\'": 39,
+    '\\"': 34,
+}
 
 # One-sided adaptation categories. Java-only nodes are erased or faithful no-ops;
 # Rust-only nodes are host/representation adapters or oracle scaffolding.
@@ -256,6 +277,50 @@ def _parse_rust_ref(value: Any, rust_counts: list[int]) -> tuple[int, int] | Non
     return target, index
 
 
+def _java_literal_value(text: str) -> int | None:
+    """The integer value of a javac numeric/char literal node, else None."""
+
+    kind, _, detail = text.partition("\t")
+    if kind in ("INT_LITERAL", "LONG_LITERAL"):
+        try:
+            return int(detail, 10)
+        except ValueError:
+            return None
+    if kind == "CHAR_LITERAL":
+        if len(detail) == 1:
+            return ord(detail)
+        return RUST_CHAR_ESCAPES.get(detail)
+    return None
+
+
+def _rust_literal_value(text: str) -> int | None:
+    """The integer value of a syn LITERAL node, normalizing base/suffix, else None.
+
+    Hex/octal/binary/decimal and type-suffixed forms all collapse to their value,
+    so a Rust ``0xFF`` and a Java ``255`` compare equal without a note; strings,
+    booleans, and floats are not compared here.
+    """
+
+    kind, _, detail = text.partition("\t")
+    if kind != "LITERAL":
+        return None
+    token = detail.strip()
+    if not token or token.startswith('"') or token in ("true", "false"):
+        return None
+    if token.startswith("b'") and token.endswith("'"):
+        token = token[1:]
+    if token.startswith("'") and token.endswith("'") and len(token) >= 3:
+        inner = token[1:-1]
+        if len(inner) == 1:
+            return ord(inner)
+        return RUST_CHAR_ESCAPES.get(inner)
+    token = RUST_INT_SUFFIX.sub("", token.replace("_", ""))
+    try:
+        return int(token, 0)  # base 0: auto-detect 0x / 0o / 0b / decimal
+    except ValueError:
+        return None
+
+
 def _realizes(kind: str, rust_texts: list[str], must_realize: dict) -> bool:
     operator_pattern, helpers = must_realize[kind]
     for text in rust_texts:
@@ -387,11 +452,11 @@ def _validate_body(
                     f"{len(java_refs)} Java / {len(rust_refs)} Rust nodes "
                     f"(> {blanket_max_span}); decompose into atomic steps"
                 )
-        op_java_kinds: list[str] = []
+        op_java_texts: list[str] = []
         for ref in java_refs:
             claim_java(ref, context)
             if isinstance(ref, int) and 0 <= ref < len(java_texts):
-                op_java_kinds.append(java_texts[ref].split("\t", 1)[0])
+                op_java_texts.append(java_texts[ref])
         op_rust_texts: list[str] = []
         for ref in rust_refs:
             parsed = claim_rust(ref, context)
@@ -399,6 +464,7 @@ def _validate_body(
                 target_nodes = rust_texts[parsed[0]]
                 if parsed[1] < len(target_nodes):
                     op_rust_texts.append(target_nodes[parsed[1]])
+        op_java_kinds = [text.split("\t", 1)[0] for text in op_java_texts]
         # Atomic operator-realization parity (the paint_radio_row bug-catcher).
         if evidence is not None and not op.get("shape_note"):
             for kind in must_realize:
@@ -409,6 +475,34 @@ def _validate_body(
                         f"realization (expected {must_realize[kind][0]!r} or one of "
                         f"{must_realize[kind][1]}); Rust nodes are {op_rust_texts!r}"
                     )
+        # Literal / index parity (the build_dialogue_menu entity_row[13] bug-catcher):
+        # the numeric constants a paired op carries must match on both sides. A Rust
+        # array-index literal 13 paired against a Java index 10, a wrong numeric
+        # argument, or a mismatched arithmetic constant is red unless a sanctioned
+        # transform is documented in literal_note / shape_note.
+        if evidence is not None and not (op.get("shape_note") or op.get("literal_note")):
+            java_literals = Counter(
+                value
+                for text in op_java_texts
+                if (value := _java_literal_value(text)) is not None
+            )
+            rust_literals = Counter(
+                value
+                for text in op_rust_texts
+                if (value := _rust_literal_value(text)) is not None
+            )
+            java_only = list((java_literals - rust_literals).elements())
+            rust_only = list((rust_literals - java_literals).elements())
+            if java_only or rust_only:
+                crisp = ""
+                if len(java_only) == 1 and len(rust_only) == 1:
+                    crisp = f" (literal {rust_only[0]} != {java_only[0]})"
+                errors.append(
+                    f"{label}: {context} pairs mismatched literal constants{crisp} — "
+                    f"Rust-only {sorted(rust_only)}, Java-only {sorted(java_only)}; "
+                    "wrong index/constant, or document a sanctioned transform in "
+                    "literal_note"
+                )
 
     for index, adapt in enumerate(adaptations):
         context = f"adapt {index}"
@@ -616,10 +710,32 @@ def self_test(manifest: dict, evidence_data: dict) -> int:
         print("self-test: a one-node Java drift did not break the lock", file=sys.stderr)
         return 1
 
+    # Substituting one Rust integer literal for a value the paired Java node does
+    # not carry must trip the literal/index parity tooth. Re-lock the node digest
+    # first so ONLY the literal mismatch is left to fire.
+    litdata = copy.deepcopy(manifest)
+    litev = copy.deepcopy(evidence_data)
+    lit_nodes = litev["body"][0]["rust"][0]["nodes"]
+    flipped = False
+    for i, text in enumerate(lit_nodes):
+        value = _rust_literal_value(text)
+        if value is not None:
+            lit_nodes[i] = "LITERAL\t4242424"
+            flipped = True
+            break
+    litdata["body"][0]["rust"][0]["nodes_sha256"] = node_inventory_digest(lit_nodes)
+    report = validate(litdata, load_evidence(litev), strict=True)
+    if not flipped or not any(
+        "mismatched literal constants" in error for error in report.errors
+    ):
+        print("self-test: a substituted Rust literal did not trip index parity", file=sys.stderr)
+        return 1
+
     print(
         "crosswalk self-test ok: 5 manifest perturbations (dropped decision, coarse "
-        "blanket, bytecode/Java-AST/Rust-AST digest) each went red, and a one-node "
-        "evidence drift broke the node-inventory lock"
+        "blanket, bytecode/Java-AST/Rust-AST digest) each went red; a one-node "
+        "evidence drift broke the node-inventory lock; and a substituted Rust "
+        "literal tripped the literal/index parity tooth"
     )
     return 0
 

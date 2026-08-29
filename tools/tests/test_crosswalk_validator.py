@@ -28,6 +28,9 @@ EVIDENCE = _load("paint_radio_row.evidence.toml")
 FINE = _load("paint_radio_row.crosswalk.toml")
 COARSE = _load("paint_radio_row.coarse.toml")
 BUGGY = _load("paint_radio_row.buggy.toml")
+ENTITY_EVIDENCE = _load("entity_row_index.evidence.toml")
+ENTITY_GOOD = _load("entity_row_index.crosswalk.toml")
+ENTITY_BAD = _load("entity_row_index.badindex.toml")
 
 
 def _synthetic() -> tuple[dict, dict]:
@@ -175,6 +178,67 @@ class CrosswalkValidatorTests(unittest.TestCase):
             ),
             report.errors,
         )
+
+    def test_entity_row_good_index_is_green(self) -> None:
+        report = validate(ENTITY_GOOD, load_evidence(ENTITY_EVIDENCE), strict=True)
+        self.assertEqual(report.errors, [])
+
+    def test_literal_index_parity_catches_wrong_column(self) -> None:
+        # The recreated build_dialogue_menu crash: Rust entity_row(...)[13] paired
+        # against the faithful Java index 10.
+        report = validate(ENTITY_BAD, load_evidence(ENTITY_EVIDENCE))
+        self.assertTrue(
+            any("mismatched literal constants" in e for e in report.errors), report.errors
+        )
+        self.assertTrue(
+            any("literal 13 != 10" in e for e in report.errors), report.errors
+        )
+
+    def test_hex_and_decimal_literals_compare_equal(self) -> None:
+        # A Rust 0xff paired against a Java 255 is the same value — no note needed.
+        manifest, evidence = _synthetic()
+        evidence["body"][0]["java_nodes"] = ["ARRAY_ACCESS\t", "INT_LITERAL\t255"]
+        evidence["body"][0]["rust"][0]["nodes"] = ["INDEX\t", "LITERAL\t0xff"]
+        body = manifest["body"][0]
+        body["java_nodes_sha256"] = node_inventory_digest(["ARRAY_ACCESS\t", "INT_LITERAL\t255"])
+        body["rust"][0]["nodes_sha256"] = node_inventory_digest(["INDEX\t", "LITERAL\t0xff"])
+        body["java_node_count"] = 2
+        body["rust"][0]["node_count"] = 2
+        body["op"] = [
+            {
+                "semantic": "mask[255] read (Rust hex form)",
+                "java_range": [[0, 1]],
+                "rust_range": [{"target": 0, "start": 0, "end": 1}],
+            }
+        ]
+        report = validate(manifest, load_evidence(evidence), strict=True)
+        self.assertEqual(report.errors, [], report.errors)
+
+    def test_literal_note_documents_a_sanctioned_transform(self) -> None:
+        # A genuine value transform (index+1, const lifting) is allowed once noted.
+        manifest, evidence = _synthetic()
+        evidence["body"][0]["java_nodes"] = ["ARRAY_ACCESS\t", "INT_LITERAL\t10"]
+        evidence["body"][0]["rust"][0]["nodes"] = ["INDEX\t", "LITERAL\t11"]
+        body = manifest["body"][0]
+        body["java_nodes_sha256"] = node_inventory_digest(["ARRAY_ACCESS\t", "INT_LITERAL\t10"])
+        body["rust"][0]["nodes_sha256"] = node_inventory_digest(["INDEX\t", "LITERAL\t11"])
+        body["java_node_count"] = 2
+        body["rust"][0]["node_count"] = 2
+        op = {
+            "semantic": "row read with a documented off-by-one representation",
+            "java_range": [[0, 1]],
+            "rust_range": [{"target": 0, "start": 0, "end": 1}],
+        }
+        body["op"] = [dict(op)]
+        # Without the note it is flagged; with it, allowed.
+        self.assertTrue(
+            any(
+                "mismatched literal constants" in e
+                for e in validate(manifest, load_evidence(evidence)).errors
+            )
+        )
+        body["op"] = [{**op, "literal_note": "Rust stores the 1-based row index"}]
+        self.assertEqual(validate(manifest, load_evidence(evidence), strict=True).errors, [])
 
     def test_undecided_nodes_are_counted_and_body_partial(self) -> None:
         manifest, evidence = _synthetic()

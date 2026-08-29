@@ -15,7 +15,7 @@ row when you add a gate.
 | Originals provenance | `just originals-verify` | `just originals-verify-canfail` (proven RED on a one-byte payload corruption) |
 | Codec remains `no_std` | `just codec-no-std` | The crate is compiled with default features disabled; filesystem/runtime code is outside its dependency graph. |
 | Generic line oracle | `python3 -m unittest tools.tests.test_line_oracle` | `just oracle-harness-canfail` runs two independent processes, injects one changed observation, and requires exactly one mismatch. |
-| Per-node AST crosswalk | `just crosswalk-check` (+ `python3 -m unittest tools.tests.test_crosswalk_validator`) | `just crosswalk-canfail` (`--self-test`: dropped decision, coarse blanket, and bytecode/Java-AST/Rust-AST digest perturbations each go red, plus a one-node evidence drift breaks the node lock). `just crosswalk-fixture-canfail` proves the coarse-blanket and div-vs-`sm()` bug rows go red. |
+| Per-node AST crosswalk | `just crosswalk-check` (+ `python3 -m unittest tools.tests.test_crosswalk_validator`) | `just crosswalk-canfail` (`--self-test`: dropped decision, coarse blanket, and bytecode/Java-AST/Rust-AST digest perturbations each go red, a one-node evidence drift breaks the node lock, and a substituted Rust literal trips index parity). `just crosswalk-fixture-canfail` proves the coarse-blanket, div-vs-`sm()`, and `entity_row[13]`-vs-`[10]` bug rows go red. |
 
 ## Content-addressed affected-gate loop
 

@@ -48,12 +48,20 @@ categorized one-sided adaptation.
    `i64_ushr`). This is where `paint_radio_row` broke: a division paired against
    a bare `sm(..)` call now fails the gate. Cite `op.shape_note` only for a
    representation the verifier cannot derive from those known helpers.
-4. **Categorize every one-sided node.** A Rust-only host/representation adapter or
+4. **Watch the literal / index parity.** When a step carries a constant — an array
+   or string index, a numeric argument, an arithmetic literal — confirm the value
+   matches on both sides. This is where `build_dialogue_menu` crashed: the Rust
+   read `entity_row(..)[13]` where the faithful column is `[10]`, and the tool now
+   pairs the two index literals and goes red `literal 13 != 10`. Hex/decimal and
+   type-suffixed forms compare by value (`0xff` == `255`, no note); a genuine
+   transform (a 1-based index, a lifted named const) is documented in
+   `op.literal_note`.
+5. **Categorize every one-sided node.** A Rust-only host/representation adapter or
    a Java-only erased/no-op node goes in `adapt` with a category and a reason.
-5. **Lock the digests.** Record `code_sha256`, `opcode_sha256`, `java_ast_sha256`,
+6. **Lock the digests.** Record `code_sha256`, `opcode_sha256`, `java_ast_sha256`,
    `java_nodes_sha256`, and per-target `ast_sha256` / `nodes_sha256`; the wrapper
    recomputes them from live sources so any later drift is red.
-6. **Do not mark `crosswalked` until coverage is 100%.** `--coverage` shows
+7. **Do not mark `crosswalked` until coverage is 100%.** `--coverage` shows
    `decided/total` per body; a partial body is honest work-in-progress, not a
    verified one. `--strict` requires zero undecided nodes across the manifest.
 
