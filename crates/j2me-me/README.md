@@ -10,7 +10,10 @@ It provides the device-runtime surface a strict 2D port draws on:
   `drawLine` / `drawImage` / `drawRegion` plus the `drawArc` / `fillArc` ellipse
   sector rasteriser (`Graphics`, `GraphicsError`, `SpriteTransform`);
 - **`canvas`** — the `Canvas` / `Display` serial paint-input queue and the
-  `Displayable` surface trait;
+  `Displayable` surface trait, including ordered subclass lifecycle callbacks.
+  `Display::set_current_notifying` and `clear_current_notifying` update
+  visibility and dispatch the game subclass's
+  protected `hideNotify` / `showNotify` callbacks without owning game policy;
 - **`media`** — the MMAPI player model with `VolumeControl`, a `PlayerListener`
   registration, and the `getState()` integers;
 - **`rms`** — the monotonic-record-id `RecordStore`;

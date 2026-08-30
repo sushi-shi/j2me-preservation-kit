@@ -1,5 +1,5 @@
 //! MIDP Canvas/Display state and the serialized paint/input queue, plus the
-//! [`Displayable`] surface trait.
+//! [`Displayable`] surface trait and ordered subclass visibility callbacks.
 
 use std::collections::VecDeque;
 
@@ -251,9 +251,61 @@ impl Display {
         self.has_current = true;
     }
 
+    /// `Display.setCurrent` with the protected Canvas subclass notifications
+    /// exposed to a strict transliteration.
+    ///
+    /// MIDP changes the display state around `hideNotify` / `showNotify`; the
+    /// callbacks themselves belong to the game subclass. The old Canvas is
+    /// marked hidden before `hide_notify` runs. Only after that callback
+    /// succeeds is the new Canvas marked shown and `show_notify` invoked. This
+    /// fixes both the successful order and observable failure cut points
+    /// without embedding any game policy in the runtime.
+    ///
+    /// A failing hide leaves the old Canvas hidden, `has_current == false`, and
+    /// the new Canvas untouched. A failing show leaves the new Canvas shown and
+    /// current, because the generic visibility transition already occurred.
+    pub fn set_current_notifying<HideNotify, ShowNotify, E>(
+        &mut self,
+        previous: Option<&mut Canvas>,
+        next: &mut Canvas,
+        hide_notify: HideNotify,
+        show_notify: ShowNotify,
+    ) -> Result<(), E>
+    where
+        HideNotify: FnOnce(&mut Canvas) -> Result<(), E>,
+        ShowNotify: FnOnce(&mut Canvas) -> Result<(), E>,
+    {
+        if let Some(previous) = previous {
+            previous.hide_notify();
+            self.has_current = false;
+            hide_notify(previous)?;
+        }
+        next.show_notify();
+        self.has_current = true;
+        show_notify(next)
+    }
+
     pub fn clear_current(&mut self, current: &mut Canvas) {
         current.hide_notify();
         self.has_current = false;
+    }
+
+    /// Remove the current Canvas, then dispatch its protected subclass
+    /// `hideNotify` callback.
+    ///
+    /// The visibility mutation is intentionally retained if the callback
+    /// fails: by callback time the Canvas has already ceased to be shown.
+    pub fn clear_current_notifying<HideNotify, E>(
+        &mut self,
+        current: &mut Canvas,
+        hide_notify: HideNotify,
+    ) -> Result<(), E>
+    where
+        HideNotify: FnOnce(&mut Canvas) -> Result<(), E>,
+    {
+        current.hide_notify();
+        self.has_current = false;
+        hide_notify(current)
     }
 
     /// `Display.vibrate(duration)`. Unsupported devices return `false` without
@@ -306,6 +358,81 @@ mod tests {
         assert_eq!(canvas.poll_event(), Some(CanvasEvent::Paint));
         display.clear_current(&mut canvas);
         assert!(!canvas.is_shown());
+    }
+
+    #[test]
+    fn notifying_transition_hides_before_showing_and_exposes_updated_state() {
+        let mut display = Display::default();
+        let mut previous = Canvas::new(176, 220);
+        let mut next = Canvas::new(240, 320);
+        display.set_current(None, &mut previous);
+        let calls = std::cell::RefCell::new(Vec::new());
+
+        display
+            .set_current_notifying(
+                Some(&mut previous),
+                &mut next,
+                |canvas| {
+                    assert!(!canvas.is_shown());
+                    calls.borrow_mut().push("hide");
+                    Ok::<(), &'static str>(())
+                },
+                |canvas| {
+                    assert!(canvas.is_shown());
+                    calls.borrow_mut().push("show");
+                    Ok::<(), &'static str>(())
+                },
+            )
+            .unwrap();
+
+        assert_eq!(calls.into_inner(), vec!["hide", "show"]);
+        assert!(!previous.is_shown());
+        assert!(next.is_shown());
+        assert!(display.has_current());
+        assert_eq!(next.poll_event(), Some(CanvasEvent::Paint));
+    }
+
+    #[test]
+    fn notifying_transition_preserves_hide_and_show_failure_cut_points() {
+        let mut display = Display::default();
+        let mut previous = Canvas::new(176, 220);
+        let mut next = Canvas::new(240, 320);
+        display.set_current(None, &mut previous);
+
+        let hide_failure = display.set_current_notifying(
+            Some(&mut previous),
+            &mut next,
+            |canvas| {
+                assert!(!canvas.is_shown());
+                Err("hide")
+            },
+            |_| panic!("showNotify must not run after hideNotify fails"),
+        );
+        assert_eq!(hide_failure, Err("hide"));
+        assert!(!previous.is_shown());
+        assert!(!next.is_shown());
+        assert!(!display.has_current());
+
+        let show_failure = display.set_current_notifying(
+            None,
+            &mut next,
+            |_| panic!("there is no previous Canvas to hide"),
+            |canvas| {
+                assert!(canvas.is_shown());
+                Err("show")
+            },
+        );
+        assert_eq!(show_failure, Err("show"));
+        assert!(next.is_shown());
+        assert!(display.has_current());
+
+        let hide_failure = display.clear_current_notifying(&mut next, |canvas| {
+            assert!(!canvas.is_shown());
+            Err("clear-hide")
+        });
+        assert_eq!(hide_failure, Err("clear-hide"));
+        assert!(!next.is_shown());
+        assert!(!display.has_current());
     }
 
     #[test]

@@ -8,7 +8,8 @@
 //!   `drawImage`/`drawRegion` (with `GraphicsError`/`SpriteTransform`) plus
 //!   `drawArc` / `fillArc` (the MIDP ellipse-sector rasteriser);
 //! - [`canvas`] — the `Canvas`/`Display` serial paint-input queue, the
-//!   [`Displayable`] surface, host-visible `Display.vibrate` requests, and the
+//!   [`Displayable`] surface, ordered subclass `showNotify`/`hideNotify`
+//!   dispatch, host-visible `Display.vibrate` requests, and the
 //!   `Canvas.getGameAction` resolver with its MIDP-default and Nokia device
 //!   key-to-action tables;
 //! - [`media`] — the MMAPI player model with `VolumeControl`
