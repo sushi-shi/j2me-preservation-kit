@@ -438,6 +438,36 @@ impl<'a> Graphics<'a> {
             height: self.target.height(),
         }
     }
+
+    /// Plot one pixel in user coordinates through the current translate and
+    /// clip. `blend = true` alpha-composites (source-over) using the source
+    /// pixel's own alpha; `false` writes it through unchanged. This is the
+    /// low-level primitive vendor blitters (e.g. Nokia `DirectGraphics.drawPixels`
+    /// in the `j2me-nokia` crate) build on so they share this `Graphics`' *live*
+    /// clip and translation rather than a snapshot.
+    pub fn plot(&mut self, x: i32, y: i32, argb: u32, blend: bool) {
+        let px = x.wrapping_add(self.translate_x);
+        let py = y.wrapping_add(self.translate_y);
+        if !self.clip.contains(px, py) {
+            return;
+        }
+        if blend {
+            self.target.blend(px, py, argb);
+        } else {
+            self.target.set(px, py, argb);
+        }
+    }
+
+    /// Read one pixel in user coordinates through the current translate, or
+    /// `None` outside the target bounds. The read-back primitive for vendor
+    /// `getPixels`; unlike [`plot`](Self::plot) it is deliberately *not* clipped
+    /// (a raw target read, matching Nokia `DirectGraphics.getPixels`).
+    pub fn read(&self, x: i32, y: i32) -> Option<u32> {
+        self.target.get(
+            x.wrapping_add(self.translate_x),
+            y.wrapping_add(self.translate_y),
+        )
+    }
 }
 
 /// Resolve a MIDP anchor to the top-left draw position, validating the anchor

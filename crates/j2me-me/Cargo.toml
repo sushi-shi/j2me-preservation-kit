@@ -3,12 +3,17 @@ name = "j2me-me"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Reusable Java ME/MIDP device-runtime core for strict transliterations"
-publish = false
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Reusable Java ME/MIDP 2D device-runtime core for strict transliterations"
+readme = "README.md"
+keywords = ["j2me", "midp", "java-me", "lcdui", "device-runtime"]
+categories = ["game-development", "emulators", "rendering"]
 
 [dependencies]
-j2me-canvas = { path = "../j2me-canvas" }
-j2me-jvm = { path = "../j2me-jvm" }
+j2me-canvas = { path = "../j2me-canvas", version = "0.1.0" }
+j2me-jvm = { path = "../j2me-jvm", version = "0.1.0" }
 # `png` backs the device runtime's `Image.createImage(byte[])` / `createImage(String)`
 # decode factories (`image` module). Pure-Rust, no C codec.
 png = { workspace = true }

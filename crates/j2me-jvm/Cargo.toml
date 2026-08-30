@@ -3,7 +3,12 @@ name = "j2me-jvm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Reusable JVM primitive semantics for strict J2ME transliterations"
-publish = false
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "JVM primitive semantics (overflow, division, shifts) for strict J2ME transliterations"
+readme = "README.md"
+keywords = ["j2me", "jvm", "java", "midp", "transliteration"]
+categories = ["emulators", "game-development"]
 
 [dependencies]

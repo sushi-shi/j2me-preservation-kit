@@ -5,14 +5,26 @@ members = [
     "crates/j2me-codec",
     "crates/j2me-jvm",
     "crates/j2me-me",
+    "crates/j2me-nokia",
     "transliteration/game-xlat",
     "tools/ast/j2me-ast-audit",
+    "crates/j2me-input",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "CC0-1.0"
+# Canonical source for all portable crates. Game repositories consume an exact
+# commit through Cargo's `git` + `rev` fields; crates.io publication can use the
+# same metadata later.
+repository = "https://github.com/sushi-shi/j2me-preservation-kit"
+homepage = "https://github.com/sushi-shi/j2me-preservation-kit"
+# Conservative MSRV: these crates use only long-stable language features
+# (captured format args, const fn, checked arithmetic, `no_std` core). Bump
+# deliberately if a newer feature is adopted. `documentation` is intentionally
+# left unset so crates.io auto-links each crate's docs.rs page.
+rust-version = "1.75"
 
 [workspace.dependencies]
 quote = "1"

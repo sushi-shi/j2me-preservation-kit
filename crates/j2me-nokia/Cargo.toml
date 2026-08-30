@@ -1,0 +1,19 @@
+[package]
+name = "j2me-nokia"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Nokia UI (com.nokia.mid.ui) DirectGraphics — opt-in vendor blitter over j2me-me"
+readme = "README.md"
+keywords = ["j2me", "nokia", "midp", "directgraphics", "blitter"]
+categories = ["game-development", "rendering", "emulators"]
+
+# Opt-in: only games that render through a Nokia FullCanvas + drawPixels depend
+# on this. It builds on the neutral device runtime; standard-MIDP games ignore it.
+[dependencies]
+j2me-canvas = { path = "../j2me-canvas", version = "0.1.0" }
+j2me-jvm = { path = "../j2me-jvm", version = "0.1.0" }
+j2me-me = { path = "../j2me-me", version = "0.1.0" }
