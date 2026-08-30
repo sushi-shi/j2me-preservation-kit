@@ -26,10 +26,20 @@
 //! Java edge semantics differ from naive Rust — `Math.abs(MIN) == MIN`, the
 //! saturating `(int)`-on-`float` narrowing, and the widen/narrow `(float)
 //! Math.sqrt` — so every port shares one copy instead of re-deriving them.
+//!
+//! ## `java.io.DataInputStream` / `DataOutputStream`
+//!
+//! [`io`] is the big-endian, signed `DataInput`/`DataOutput` stream codec over
+//! an in-memory `&[u8]`, including `readUTF`/`writeUTF` modified UTF-8. It is
+//! distinct from `j2me-codec`'s `no_std` bounded reader: this one is `std`,
+//! returns [`JavaError`]/[`JavaResult`], and mirrors the full Java method
+//! surface.
 
+pub mod io;
 pub mod math;
 pub mod random;
 
+pub use io::{DataInputStream, DataOutputStream};
 pub use math::{d2f, f2i, f2l, fsqrt, i2f, iabs, imax, imin, ineg};
 pub use random::Random;
 
