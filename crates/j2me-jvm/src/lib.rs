@@ -19,9 +19,18 @@
 //!
 //! [`random`] adds the JVM's 48-bit LCG ([`Random`]) so every port shares one
 //! bit-identical `java.util.Random` instead of duplicating it.
+//!
+//! ## `java.lang.Math` and numeric conversions
+//!
+//! [`math`] names the `java.lang.Math` helpers and JVM narrowing casts whose
+//! Java edge semantics differ from naive Rust — `Math.abs(MIN) == MIN`, the
+//! saturating `(int)`-on-`float` narrowing, and the widen/narrow `(float)
+//! Math.sqrt` — so every port shares one copy instead of re-deriving them.
 
+pub mod math;
 pub mod random;
 
+pub use math::{d2f, f2i, f2l, fsqrt, i2f, iabs, imax, imin, ineg};
 pub use random::Random;
 
 use std::cell::Cell;
