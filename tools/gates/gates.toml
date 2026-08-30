@@ -41,6 +41,7 @@ commands = [
   ["just", "crosswalk-check"],
   ["just", "crosswalk-canfail"],
   ["just", "crosswalk-fixture-canfail"],
+  ["just", "crosswalk-scoper-test"],
 ]
 
 [[gate]]

@@ -324,7 +324,8 @@ class CrosswalkValidatorTests(unittest.TestCase):
             "rust_range": [{"target": 0, "start": 0, "end": 1}],
         }
         body["op"] = [dict(op)]
-        # Without the note it is flagged; with it, allowed.
+        # Without the note it is flagged; prose alone is still red; only an exact
+        # multiset delta unlocks this reviewed transform.
         self.assertTrue(
             any(
                 "mismatched literal constants" in e
@@ -332,7 +333,72 @@ class CrosswalkValidatorTests(unittest.TestCase):
             )
         )
         body["op"] = [{**op, "literal_note": "Rust stores the 1-based row index"}]
+        self.assertTrue(
+            any(
+                "requires an exact literal_delta" in error
+                for error in validate(manifest, load_evidence(evidence)).errors
+            )
+        )
+        body["op"] = [
+            {
+                **op,
+                "literal_note": "Rust stores the 1-based row index",
+                "literal_delta": {"java_only": [10], "rust_only": [11]},
+            }
+        ]
         self.assertEqual(validate(manifest, load_evidence(evidence), strict=True).errors, [])
+
+    def test_literal_delta_must_match_the_exact_multiset(self) -> None:
+        manifest, evidence = _synthetic()
+        java_nodes = ["ARRAY_ACCESS\t", "INT_LITERAL\t10", "INT_LITERAL\t10"]
+        rust_nodes = ["INDEX\t", "LITERAL\t11", "LITERAL\t11"]
+        evidence["body"][0]["java_nodes"] = java_nodes
+        evidence["body"][0]["rust"][0]["nodes"] = rust_nodes
+        body = manifest["body"][0]
+        body["java_nodes_sha256"] = node_inventory_digest(java_nodes)
+        body["rust"][0]["nodes_sha256"] = node_inventory_digest(rust_nodes)
+        body["java_node_count"] = len(java_nodes)
+        body["rust"][0]["node_count"] = len(rust_nodes)
+        body["op"] = [
+            {
+                "semantic": "two transformed indices",
+                "java_range": [[0, 2]],
+                "rust_range": [{"target": 0, "start": 0, "end": 2}],
+                "literal_note": "Both indices use the one-based host representation.",
+                "literal_delta": {"java_only": [10], "rust_only": [11]},
+            }
+        ]
+        report = validate(manifest, load_evidence(evidence), strict=True)
+        self.assertTrue(
+            any("literal_delta is stale or wrong" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_stale_literal_delta_is_rejected(self) -> None:
+        manifest, evidence = _synthetic()
+        java_nodes = ["ARRAY_ACCESS\t", "INT_LITERAL\t255"]
+        rust_nodes = ["INDEX\t", "LITERAL\t0xff"]
+        evidence["body"][0]["java_nodes"] = java_nodes
+        evidence["body"][0]["rust"][0]["nodes"] = rust_nodes
+        body = manifest["body"][0]
+        body["java_nodes_sha256"] = node_inventory_digest(java_nodes)
+        body["rust"][0]["nodes_sha256"] = node_inventory_digest(rust_nodes)
+        body["java_node_count"] = len(java_nodes)
+        body["rust"][0]["node_count"] = len(rust_nodes)
+        body["op"] = [
+            {
+                "semantic": "equal values with a stale waiver",
+                "java_range": [[0, 1]],
+                "rust_range": [{"target": 0, "start": 0, "end": 1}],
+                "literal_note": "This obsolete note must be removed.",
+                "literal_delta": {"java_only": [255], "rust_only": [255]},
+            }
+        ]
+        report = validate(manifest, load_evidence(evidence), strict=True)
+        self.assertTrue(
+            any("literal_delta is stale" in error for error in report.errors),
+            report.errors,
+        )
 
     def test_reasoned_temporal_interleave_is_green(self) -> None:
         report = validate(

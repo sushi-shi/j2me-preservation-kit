@@ -35,10 +35,13 @@ categorized one-sided adaptation.
 
 ## Recommended per-body procedure
 
-1. **Emit both node inventories.** Run `JavaAstAuditDump` for the canonical Java
-   body and `j2me-ast-audit` for each Rust target; these are the indexed node
-   lists you will reference. (`--show-java-nodes` / `--show-rust-nodes` style
-   dumps make the indices visible.)
+1. **Emit both node inventories.** Run `tools/ast/scope_crosswalk.py` with the
+   exact canonical Java owner/item, each Rust file/item target, and the original
+   Code/opcode hashes. The generic scoper invokes `JavaAstAuditDump` and
+   `j2me-ast-audit` itself, prints the indexed node lists, and emits matching
+   schema-2 body/evidence JSON with AST/node hashes and counts. It deliberately
+   leaves `op` and `adapt` empty for the reviewer to decide; see
+   `tools/ast/README.md` for the complete invocation.
 2. **Walk the bytecode in order.** For each atomic step the original performs,
    write one `op` whose `semantic` states what the step computes and whose `java`
    / `rust` indices name the nodes that implement it on each side. Keep each op to
@@ -54,9 +57,12 @@ categorized one-sided adaptation.
    matches on both sides. This is where `build_dialogue_menu` crashed: the Rust
    read `entity_row(..)[13]` where the faithful column is `[10]`, and the tool now
    pairs the two index literals and goes red `literal 13 != 10`. Hex/decimal and
-   type-suffixed forms compare by value (`0xff` == `255`, no note); a genuine
-   transform (a 1-based index, a lifted named const) is documented in
-   `op.literal_note`.
+   type-suffixed forms compare by value (`0xff` == `255`, no note). A genuine
+   literal-only transform (a 1-based index, a lifted named const) needs a
+   nonempty `op.literal_note` plus its exact one-sided multiset lock, for example
+   `literal_delta = { java_only = [10], rust_only = [11] }`. Both arrays are
+   required and duplicates matter. A missing, wrong, or stale delta is red, so a
+   note cannot silently exempt later literal drift.
 5. **Categorize every one-sided node.** A Rust-only host/representation adapter or
    a Java-only erased/no-op node goes in `adapt` with a category and a reason.
 6. **Resolve crossing owners.** Ordinary AST nesting can make one decision wrap

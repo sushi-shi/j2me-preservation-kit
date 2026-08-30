@@ -40,7 +40,8 @@ The teeth (each proven can-fail by ``--self-test``)
    side carries (index literals, integer/char literals, numeric arguments) must be
    equal in value (hex/decimal/suffix and unary-sign forms normalized). A Rust ``entity_row[13]``
    paired against the faithful Java ``[10]`` — the build_dialogue_menu crash — is
-   red unless documented in ``literal_note`` / ``shape_note``.
+   red. A narrow ``literal_note`` must lock the exact one-sided
+   ``literal_delta``; ``shape_note`` remains the broader representation escape.
 5. Crossing-ownership rejection — ordinary ``A-B-A`` pre-order nesting is legal,
    but ``A-B-A-B`` means two decisions are temporally interleaved. It is red unless
    an exact body-level ``interleave`` owner group gives the representation reason.
@@ -662,9 +663,10 @@ def _validate_body(
         # Literal / index parity (the build_dialogue_menu entity_row[13] bug-catcher):
         # the numeric constants a paired op carries must match on both sides. A Rust
         # array-index literal 13 paired against a Java index 10, a wrong numeric
-        # argument, or a mismatched arithmetic constant is red unless a sanctioned
-        # transform is documented in literal_note / shape_note.
-        if evidence is not None and not (op.get("shape_note") or op.get("literal_note")):
+        # argument, or a mismatched arithmetic constant is red. A narrow
+        # literal_note must lock the exact one-sided multiset delta; shape_note is
+        # the broader representation escape hatch and remains independently reasoned.
+        if evidence is not None:
             java_literals = Counter(
                 value
                 for text in op_java_texts
@@ -675,7 +677,62 @@ def _validate_body(
             )
             java_only = list((java_literals - rust_literals).elements())
             rust_only = list((rust_literals - java_literals).elements())
-            if java_only or rust_only:
+            literal_note = op.get("literal_note")
+            literal_delta = op.get("literal_delta")
+            has_literal_claim = "literal_note" in op or "literal_delta" in op
+            claim_valid = True
+            declared_java: list[int] = []
+            declared_rust: list[int] = []
+            if has_literal_claim:
+                if not isinstance(literal_note, str) or not literal_note.strip():
+                    errors.append(f"{label}: {context} literal_note must be nonempty")
+                    claim_valid = False
+                if not isinstance(literal_delta, dict):
+                    errors.append(
+                        f"{label}: {context} literal_note requires an exact "
+                        "literal_delta table"
+                    )
+                    claim_valid = False
+                else:
+                    unknown = sorted(set(literal_delta) - {"java_only", "rust_only"})
+                    if unknown:
+                        errors.append(
+                            f"{label}: {context} literal_delta has unknown key(s) "
+                            f"{unknown}"
+                        )
+                        claim_valid = False
+                    for side, destination in (
+                        ("java_only", declared_java),
+                        ("rust_only", declared_rust),
+                    ):
+                        values = literal_delta.get(side)
+                        if not isinstance(values, list) or not all(
+                            type(value) is int for value in values
+                        ):
+                            errors.append(
+                                f"{label}: {context} literal_delta.{side} must be "
+                                "an array of integers"
+                            )
+                            claim_valid = False
+                        else:
+                            destination.extend(values)
+                if claim_valid:
+                    if not java_only and not rust_only:
+                        errors.append(
+                            f"{label}: {context} literal_delta is stale: the paired "
+                            "literal multisets already match"
+                        )
+                    elif (
+                        Counter(declared_java) != Counter(java_only)
+                        or Counter(declared_rust) != Counter(rust_only)
+                    ):
+                        errors.append(
+                            f"{label}: {context} literal_delta is stale or wrong: "
+                            f"declared Java-only {sorted(declared_java)}, Rust-only "
+                            f"{sorted(declared_rust)}; observed Java-only "
+                            f"{sorted(java_only)}, Rust-only {sorted(rust_only)}"
+                        )
+            elif (java_only or rust_only) and not op.get("shape_note"):
                 crisp = ""
                 if len(java_only) == 1 and len(rust_only) == 1:
                     crisp = f" (literal {rust_only[0]} != {java_only[0]})"
@@ -683,7 +740,7 @@ def _validate_body(
                     f"{label}: {context} pairs mismatched literal constants{crisp} — "
                     f"Rust-only {sorted(rust_only)}, Java-only {sorted(java_only)}; "
                     "wrong index/constant, or document a sanctioned transform in "
-                    "literal_note"
+                    "literal_note + literal_delta"
                 )
 
     for index, adapt in enumerate(adaptations):

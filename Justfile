@@ -54,14 +54,22 @@ crosswalk-canfail:
     python3 tools/ast/validate_crosswalk.py --self-test
 
 # Prove the fixture bug rows go red as recorded: coarse blanket, div-vs-sm() call
-# (operator parity), entity_row[13]-vs-[10] (literal/index parity), and A-B-A-B
-# ownership whose exact interleave owner group was removed.
+# (operator parity), entity_row[13]-vs-[10] (literal/index parity), wrong/stale
+# literal-delta locks, and A-B-A-B ownership whose exact interleave owner group
+# was removed.
 crosswalk-fixture-canfail:
     python3 -m unittest \
         tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_coarse_blanket_is_rejected \
         tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_operator_parity_catches_div_vs_call \
         tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_literal_index_parity_catches_wrong_column \
+        tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_literal_delta_must_match_the_exact_multiset \
+        tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_stale_literal_delta_is_rejected \
         tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_temporal_interleave_waiver_removal_is_rejected
+
+# Prove the reusable single-body scoper selects the two live emitter outputs and
+# produces stable indexed/hash evidence without inventing semantic ownership.
+crosswalk-scoper-test:
+    python3 -m unittest tools.tests.test_crosswalk_scoper
 
 # Regenerate builds.toml provenance from a resources dir (mechanical facts only;
 # the judgment calls stay flagged for Phase 1 — see the file header).
@@ -102,6 +110,7 @@ check:
     just crosswalk-check
     just crosswalk-canfail
     just crosswalk-fixture-canfail
+    just crosswalk-scoper-test
     if [ -d tools/tests ]; then python3 -m unittest discover -s tools/tests; fi
     if [ -f Cargo.toml ]; then cargo fmt --all --check; fi
     if [ -f Cargo.toml ]; then cargo clippy --workspace --all-targets -- -D warnings; fi
