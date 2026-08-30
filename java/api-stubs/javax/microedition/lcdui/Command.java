@@ -12,4 +12,3 @@ public class Command {
 
     public Command(String label, int commandType, int priority) {}
 }
-

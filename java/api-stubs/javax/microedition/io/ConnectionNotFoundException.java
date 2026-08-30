@@ -8,4 +8,3 @@ public class ConnectionNotFoundException extends java.io.IOException {
         super(message);
     }
 }
-

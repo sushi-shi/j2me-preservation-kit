@@ -7,4 +7,3 @@ public abstract class Displayable {
 
     public void setCommandListener(CommandListener listener) {}
 }
-

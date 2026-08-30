@@ -34,4 +34,3 @@ public interface Player {
 
     void removePlayerListener(PlayerListener playerListener);
 }
-

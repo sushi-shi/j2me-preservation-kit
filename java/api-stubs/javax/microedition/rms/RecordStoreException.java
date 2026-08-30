@@ -7,4 +7,3 @@ public class RecordStoreException extends Exception {
         super(message);
     }
 }
-

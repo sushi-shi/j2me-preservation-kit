@@ -460,4 +460,3 @@ def parse_class(member_path: str, data: bytes) -> ClassInfo:
         fields=fields,
         methods=methods,
     )
-

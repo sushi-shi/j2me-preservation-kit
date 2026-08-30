@@ -7,4 +7,3 @@ public class MIDletStateChangeException extends Exception {
         super(message);
     }
 }
-

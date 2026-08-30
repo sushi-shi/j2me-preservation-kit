@@ -46,4 +46,3 @@ public final class Font {
         return 0;
     }
 }
-

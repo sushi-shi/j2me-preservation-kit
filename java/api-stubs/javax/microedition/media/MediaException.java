@@ -7,4 +7,3 @@ public class MediaException extends Exception {
         super(message);
     }
 }
-

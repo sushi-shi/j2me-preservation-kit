@@ -24,4 +24,3 @@ public abstract class MIDlet {
 
     public final void resumeRequest() {}
 }
-

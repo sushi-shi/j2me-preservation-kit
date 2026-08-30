@@ -11,4 +11,3 @@ public final class Manager {
         return null;
     }
 }
-

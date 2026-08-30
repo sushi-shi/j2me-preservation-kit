@@ -35,4 +35,3 @@ public class Image {
         return 0;
     }
 }
-

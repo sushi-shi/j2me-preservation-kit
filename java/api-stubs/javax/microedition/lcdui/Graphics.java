@@ -79,4 +79,3 @@ public class Graphics {
 
     public void drawImage(Image image, int x, int y, int anchor) {}
 }
-
