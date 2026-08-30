@@ -28,6 +28,8 @@ commands = [
   ["just", "classify-canfail"],
   ["just", "catalog"],
   ["just", "catalog-canfail"],
+  ["just", "device-evidence"],
+  ["just", "device-evidence-canfail"],
 ]
 
 [[gate]]
@@ -36,6 +38,7 @@ description = "Reusable oracle or exhaustive AST ownership tooling changed."
 inputs = [
   "tools/oracle",
   "tools/ast",
+  "tools/port",
   "tools/tests",
 ]
 commands = [
@@ -43,6 +46,36 @@ commands = [
   ["just", "crosswalk-check"],
   ["just", "crosswalk-canfail"],
   ["just", "crosswalk-fixture-canfail"],
+  ["just", "port-gates-canfail"],
+]
+
+[[gate]]
+name = "device-profiles"
+description = "Handset fragments or per-build profile assignments changed."
+inputs = [
+  "device-profiles.toml",
+  "java/reconstruction/builds.toml",
+  "tools/device/validate_profiles.py",
+  "tools/tests/test_device_profiles.py",
+]
+commands = [
+  ["just", "device-profiles-check"],
+  ["just", "device-profiles-canfail"],
+]
+
+[[gate]]
+name = "architecture"
+description = "Reusable crate boundaries or host-adapter dependencies changed."
+inputs = [
+  "Cargo.toml",
+  "crates/**/Cargo.toml",
+  "crates/**/src/**/*.rs",
+  "tools/architecture/**/*.py",
+  "tools/tests/test_architecture.py",
+]
+commands = [
+  ["just", "architecture-check"],
+  ["just", "architecture-canfail"],
 ]
 
 [[gate]]

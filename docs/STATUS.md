@@ -13,6 +13,12 @@ Living record of what is recovered and verified. Newest first.
   flagged for Phase 1.
 - `tools/originals/{verify,fetch,gen_builds}.py`: the `originals-verify` gate is
   **proven able to fail** (`just originals-verify-canfail`).
+- The device-evidence audit reads original classfiles plus manifest/JAD headers
+  and queues device-sensitive calls with same-method constant candidates. It
+  never turns a vendor token or accepted raw-key alias into a selected phone.
+- Device profiles keep nine independent axes. Static handset charset/system
+  properties remain reviewed device facts; dynamic host/session/operator
+  overrides are a separate `j2me-platform` layer.
 - The generic Phase-3 support is already present: JVM arithmetic/errors/clock,
   neutral ARGB images, MIDP Graphics/Canvas/MMAPI/RMS state, a line-protocol
   differential oracle, complete `javac`/`syn` walkers, and an exhaustive node

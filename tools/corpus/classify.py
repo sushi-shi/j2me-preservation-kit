@@ -14,8 +14,8 @@ and emits three regenerable artifacts into the git-ignored `_reference/`:
     counts, and its reviewed code family.
 
 Regenerating is byte-identical (R3): output is fully sorted, ASCII-escaped, and
-timestamp-free. `--self-test` proves that perturbing one class byte changes the
-fingerprinted baseline without changing another build.
+timestamp-free. `--self-test` proves that perturbing one parsed method
+fingerprint changes the baseline without changing another build.
 """
 
 from __future__ import annotations
@@ -60,6 +60,7 @@ class BuildAnalysis:
     build_id: str
     sha256: str
     size: int
+    payload: bytes
     declared_language: str
     content_language: str | None
     official: object
@@ -96,9 +97,31 @@ def content_language(payload: bytes) -> str | None:
     return None
 
 
-def analyze(*, corrupt: tuple[str, str] | None = None) -> list[BuildAnalysis]:
-    """Parse every surviving build. `corrupt=(build_id, member)` flips one
-    byte of that class member before fingerprinting (used by --self-test)."""
+def perturb_class_fingerprint(info: classfile.ClassInfo) -> None:
+    """Apply a deterministic, parse-safe negative-control perturbation.
+
+    Flipping an arbitrary raw class byte can turn a valid constant-pool operand
+    into an invalid index, testing parser rejection instead of fingerprint
+    sensitivity. Mutate the largest parsed method's three fingerprints and
+    rebuild the enclosing shape so the can-fail proof reaches the comparison it
+    is meant to exercise.
+    """
+    coded = [method for method in info.methods if method.shape_sha256 is not None]
+    if not coded:
+        raise RuntimeError(f"self-test target {info.member_path} has no code")
+    method = max(coded, key=lambda item: (item.code_size, item.ordinal))
+    for attribute in ("code_sha256", "opcode_sha256", "shape_sha256"):
+        value = getattr(method, attribute)
+        if value is not None:
+            setattr(method, attribute, classfile.sha256(f"{value}:self-test"))
+    info.class_sha256 = classfile.sha256(f"{info.class_sha256}:self-test")
+    info.shape_sha256 = classfile.class_shape(
+        info.super_name, info.interfaces, info.fields, info.methods
+    )
+
+
+def analyze(*, perturb: tuple[str, str] | None = None) -> list[BuildAnalysis]:
+    """Parse every surviving build, optionally perturbing one parsed class."""
     analyses: list[BuildAnalysis] = []
     for build in corpus.builds():
         with zipfile.ZipFile(io.BytesIO(build.payload)) as jar:
@@ -106,17 +129,16 @@ def analyze(*, corrupt: tuple[str, str] | None = None) -> list[BuildAnalysis]:
             classes = []
             for member in class_members:
                 data = jar.read(member)
-                if corrupt is not None and corrupt == (build.build_id, member) and data:
-                    # Flip a byte deep inside the class (well past the header) so
-                    # it lands in the method code, not the magic/version.
-                    idx = len(data) // 2
-                    data = data[:idx] + bytes([data[idx] ^ 0xFF]) + data[idx + 1:]
-                classes.append(classfile.parse_class(member, data))
+                info = classfile.parse_class(member, data)
+                if perturb is not None and perturb == (build.build_id, member):
+                    perturb_class_fingerprint(info)
+                classes.append(info)
         analyses.append(
             BuildAnalysis(
                 build_id=build.build_id,
                 sha256=build.sha256,
                 size=build.size,
+                payload=build.payload,
                 declared_language=build.declared_language,
                 content_language=content_language(build.payload),
                 official=build.official,
@@ -384,7 +406,7 @@ def self_test() -> int:
     clean = analyze()
     baseline = clean[0]
     target = max(baseline.game_classes, key=lambda info: len(info.methods)).member_path
-    dirty = analyze(corrupt=(baseline.build_id, target))
+    dirty = analyze(perturb=(baseline.build_id, target))
     dirty_by_id = {build.build_id: build for build in dirty}
     if dirty_by_id[baseline.build_id].game_shape_set == baseline.game_shape_set:
         print("SELF-TEST FAILED: a one-byte baseline perturbation did not change "

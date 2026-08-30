@@ -1,0 +1,29 @@
+# Ratchet allowlist for the index-safety scanner (tools/index-safety).
+#
+# Each [[allow]] silences ONE signed-index site the scanner flagged, recording
+# WHY it is not a live landmine. Two legitimate reasons:
+#
+#   - "guarded":  a dominating guard the scanner's LOCAL scope analysis could
+#     not see (a bound established in a different function, a reassignment/clamp,
+#     an invariant enforced at the call site).
+#   - "faithful": a faithful collapse-landmine tracked in a D##/G## finding —
+#     the read is byte-faithful to the original and an UPSTREAM invariant keeps
+#     the cell off the -1 sentinel here, so it is accepted, not fixed.
+#
+# Keyed by file + line + expr (whitespace-insensitive). The tool reports only
+# UN-silenced sites and their count, so this list drives a burn-down. When code
+# moves, an entry goes stale (the tool prints it) and the site must be re-triaged
+# — a moved landmine must not stay silent by accident.
+#
+# A fresh port starts with an EMPTY list: run `just index-safety`, triage the
+# obvious-safe sites into entries here, and LEAVE the genuine stale-sentinel
+# landmines (a def/row cell that a recorded collapse can leave at -1) reported
+# until their upstream sentinel is fixed. Example entry:
+#
+#   [[allow]]
+#   file = "transliteration/game-xlat/src/foo.rs"
+#   line = 123
+#   expr = "def_table[row[4] as usize]"
+#   reason = "guarded: row is a resolved inventory slot, its def id is always >= 0."
+
+allow = []

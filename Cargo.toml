@@ -3,12 +3,18 @@ resolver = "2"
 members = [
     "crates/j2me-canvas",
     "crates/j2me-codec",
+    "crates/j2me-device",
+    "crates/j2me-device-nokia",
     "crates/j2me-jvm",
     "crates/j2me-me",
+    "crates/j2me-media",
     "crates/j2me-nokia",
     "transliteration/game-xlat",
     "tools/ast/j2me-ast-audit",
     "crates/j2me-input",
+    "crates/j2me-platform",
+    "crates/j2me-platform-native",
+    "crates/j2me-platform-web",
 ]
 
 [workspace.package]
@@ -28,10 +34,13 @@ rust-version = "1.75"
 
 [workspace.dependencies]
 quote = "1"
+serde = { version = "1", features = ["derive"] }
 syn = { version = "2", features = ["full", "visit"] }
 # `png` decodes sprite/font PNGs to ARGB inside the device runtime's MIDP
 # `Image.createImage(byte[])` factory (`j2me-me::image`). Pure-Rust, no C codec.
 png = "0.17"
+toml = "0.8"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [profile.dev]
 overflow-checks = true

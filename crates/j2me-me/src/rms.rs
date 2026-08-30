@@ -10,9 +10,8 @@
 //! The modeled surface is the one a typical save-file wrapper touches:
 //! `openRecordStore(name, create)`, `closeRecordStore()`,
 //! `deleteRecordStore(name)`, `getNumRecords()`, `getNextRecordID()`,
-//! `getRecordSize(id)`, `getRecord(id)`, `addRecord(data, off, len)`. Methods a
-//! strict port does not call — `setRecord`/`deleteRecord` — are left unmodeled
-//! until a game needs them (no APIs the game never calls). Record IDs are
+//! `getRecordSize(id)`, `getRecord(id)`, `addRecord`, `setRecord`, and
+//! `deleteRecord`. Record IDs are
 //! **monotonic** as in MIDP — assigned by `addRecord`, never reused, reset only
 //! when the store itself is deleted and recreated (the delete-and-recreate a
 //! single-packed-record save wrapper does on close).
@@ -31,7 +30,7 @@ fn invalid_id(id: i32) -> JavaError {
 
 /// One record store: records keyed by their monotonic 1-based id, plus the id
 /// the next `addRecord` will assign (MIDP's `getNextRecordID`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordStore {
     records: BTreeMap<i32, Vec<i8>>,
     next_id: i32,
@@ -89,6 +88,75 @@ impl RecordStore {
             .map(|r| r.len() as i32)
             .ok_or_else(|| invalid_id(id))
     }
+
+    /// `setRecord(id, data, offset, numBytes)` replaces a record without
+    /// changing its id or the next-id sequence.
+    pub fn set_record(
+        &mut self,
+        id: i32,
+        data: &[i8],
+        offset: i32,
+        num_bytes: i32,
+    ) -> Result<(), JavaError> {
+        if !self.records.contains_key(&id) {
+            return Err(invalid_id(id));
+        }
+        self.records
+            .insert(id, slice_checked(data, offset, num_bytes)?.to_vec());
+        Ok(())
+    }
+
+    /// `deleteRecord(id)`. Deleted identifiers are never reused.
+    pub fn delete_record(&mut self, id: i32) -> Result<(), JavaError> {
+        self.records
+            .remove(&id)
+            .map(|_| ())
+            .ok_or_else(|| invalid_id(id))
+    }
+
+    pub fn size_bytes(&self) -> u64 {
+        self.records
+            .values()
+            .map(|record| record.len() as u64)
+            .sum()
+    }
+
+    fn snapshot(&self) -> RecordStoreSnapshot {
+        RecordStoreSnapshot {
+            next_id: self.next_id,
+            records: self.records.clone(),
+        }
+    }
+
+    fn from_snapshot(snapshot: RecordStoreSnapshot) -> Result<Self, JavaError> {
+        let maximum_id = snapshot.records.keys().next_back().copied().unwrap_or(0);
+        if snapshot.next_id < 1
+            || snapshot.records.keys().any(|id| *id < 1)
+            || snapshot.next_id <= maximum_id
+        {
+            return Err(JavaError::RecordStore(
+                "invalid persisted record-id sequence".to_owned(),
+            ));
+        }
+        Ok(Self {
+            records: snapshot.records,
+            next_id: snapshot.next_id,
+        })
+    }
+}
+
+/// Stable host-facing representation of one store. This is not a wire format;
+/// host crates may encode it however they choose while preserving MIDP ids.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordStoreSnapshot {
+    pub next_id: i32,
+    pub records: BTreeMap<i32, Vec<i8>>,
+}
+
+/// Deterministically ordered snapshot of the whole RMS namespace.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RmsSnapshot {
+    pub stores: BTreeMap<String, RecordStoreSnapshot>,
 }
 
 /// Java-semantics slice: reject a negative offset/length or a range past the end
@@ -116,12 +184,22 @@ fn slice_checked(data: &[i8], offset: i32, num_bytes: i32) -> Result<&[i8], Java
 #[derive(Debug, Default, Clone)]
 pub struct RmsRuntime {
     stores: HashMap<String, RecordStore>,
+    open_counts: HashMap<String, u32>,
+    capacity_bytes: Option<u64>,
 }
 
 impl RmsRuntime {
     /// A fresh, empty RMS namespace.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a namespace with the reviewed device profile's RMS quota.
+    pub fn with_capacity(capacity_bytes: Option<u64>) -> Self {
+        Self {
+            capacity_bytes,
+            ..Self::default()
+        }
     }
 
     /// `RecordStore.openRecordStore(name, createIfNecessary)`. Returns the store
@@ -136,32 +214,107 @@ impl RmsRuntime {
                 return Err(not_found(name));
             }
         }
+        *self.open_counts.entry(name.to_owned()).or_default() += 1;
         Ok(name.to_string())
     }
 
     /// `closeRecordStore()` — closes the handle. The in-memory store persists in
     /// the namespace (a real device keeps the record store across a close); this
     /// only validates the store exists, matching MIDP's throw-if-absent.
-    pub fn close(&self, name: &str) -> Result<(), JavaError> {
-        if self.stores.contains_key(name) {
-            Ok(())
-        } else {
-            Err(not_found(name))
+    pub fn close(&mut self, name: &str) -> Result<(), JavaError> {
+        let count = self.open_counts.get_mut(name).ok_or_else(|| {
+            JavaError::RecordStore(format!("RecordStoreNotOpenException: {name}"))
+        })?;
+        if *count == 0 {
+            return Err(JavaError::RecordStore(format!(
+                "RecordStoreNotOpenException: {name}"
+            )));
         }
+        *count -= 1;
+        Ok(())
     }
 
     /// `RecordStore.deleteRecordStore(name)` — removes the store (and its ids)
     /// entirely; throws `RecordStoreNotFoundException` if it does not exist.
     pub fn delete_store(&mut self, name: &str) -> Result<(), JavaError> {
-        self.stores
+        let result = self
+            .stores
             .remove(name)
             .map(|_| ())
-            .ok_or_else(|| not_found(name))
+            .ok_or_else(|| not_found(name));
+        self.open_counts.remove(name);
+        result
     }
 
     /// Whether a record store with this name exists (backs an `exists()` probe).
     pub fn contains(&self, name: &str) -> bool {
         self.stores.contains_key(name)
+    }
+
+    /// `RecordStore.listRecordStores()`, deterministically sorted. An empty
+    /// vector corresponds to the Java API's `null` result.
+    pub fn list_record_stores(&self) -> Vec<String> {
+        let mut names: Vec<_> = self.stores.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
+    pub fn used_bytes(&self) -> u64 {
+        self.stores.values().map(RecordStore::size_bytes).sum()
+    }
+
+    /// `getSizeAvailable`, saturated to Java's signed integer range.
+    pub fn size_available(&self) -> i32 {
+        let remaining = self
+            .capacity_bytes
+            .map(|capacity| capacity.saturating_sub(self.used_bytes()))
+            .unwrap_or(i32::MAX as u64);
+        remaining.min(i32::MAX as u64) as i32
+    }
+
+    fn require_space(&self, growth: u64) -> Result<(), JavaError> {
+        if self
+            .capacity_bytes
+            .is_some_and(|capacity| self.used_bytes().saturating_add(growth) > capacity)
+        {
+            Err(JavaError::RecordStore(
+                "RecordStoreFullException: RMS capacity exceeded".to_owned(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Quota-aware host dispatch for `addRecord`.
+    pub fn add_record(
+        &mut self,
+        name: &str,
+        data: &[i8],
+        offset: i32,
+        num_bytes: i32,
+    ) -> Result<i32, JavaError> {
+        let record = slice_checked(data, offset, num_bytes)?;
+        self.require_space(record.len() as u64)?;
+        self.get_mut(name)?.add_record(data, offset, num_bytes)
+    }
+
+    /// Quota-aware host dispatch for `setRecord`.
+    pub fn set_record(
+        &mut self,
+        name: &str,
+        id: i32,
+        data: &[i8],
+        offset: i32,
+        num_bytes: i32,
+    ) -> Result<(), JavaError> {
+        let new_len = slice_checked(data, offset, num_bytes)?.len() as u64;
+        let old_len = self.get(name)?.get_record_size(id)? as u64;
+        self.require_space(new_len.saturating_sub(old_len))?;
+        self.get_mut(name)?.set_record(id, data, offset, num_bytes)
+    }
+
+    pub fn delete_record(&mut self, name: &str, id: i32) -> Result<(), JavaError> {
+        self.get_mut(name)?.delete_record(id)
     }
 
     /// Shared access to an open store (`getNumRecords`/`getRecord`/… dispatch
@@ -177,6 +330,41 @@ impl RmsRuntime {
             return Err(not_found(name));
         }
         Ok(self.stores.get_mut(name).expect("just checked present"))
+    }
+
+    /// Export every store without imposing a host filesystem format.
+    pub fn snapshot(&self) -> RmsSnapshot {
+        RmsSnapshot {
+            stores: self
+                .stores
+                .iter()
+                .map(|(name, store)| (name.clone(), store.snapshot()))
+                .collect(),
+        }
+    }
+
+    /// Restore a host snapshot after validating every monotonic record-id
+    /// sequence. Invalid host data becomes a typed `RecordStoreException`.
+    pub fn from_snapshot(snapshot: RmsSnapshot) -> Result<Self, JavaError> {
+        Self::from_snapshot_with_capacity(snapshot, None)
+    }
+
+    pub fn from_snapshot_with_capacity(
+        snapshot: RmsSnapshot,
+        capacity_bytes: Option<u64>,
+    ) -> Result<Self, JavaError> {
+        let stores = snapshot
+            .stores
+            .into_iter()
+            .map(|(name, store)| Ok((name, RecordStore::from_snapshot(store)?)))
+            .collect::<Result<HashMap<_, _>, JavaError>>()?;
+        let runtime = Self {
+            stores,
+            open_counts: HashMap::new(),
+            capacity_bytes,
+        };
+        runtime.require_space(0)?;
+        Ok(runtime)
     }
 }
 
@@ -262,5 +450,42 @@ mod tests {
         assert!(rms.close("nope").is_err());
         rms.open("here", true).unwrap();
         assert!(rms.close("here").is_ok());
+    }
+
+    #[test]
+    fn host_snapshot_round_trips_monotonic_record_ids() {
+        let mut rms = RmsRuntime::new();
+        rms.open("slot", true).unwrap();
+        rms.get_mut("slot")
+            .unwrap()
+            .add_record(&[-1, 2], 0, 2)
+            .unwrap();
+        rms.get_mut("slot").unwrap().add_record(&[3], 0, 1).unwrap();
+
+        let snapshot = rms.snapshot();
+        let restored = RmsRuntime::from_snapshot(snapshot.clone()).unwrap();
+        assert_eq!(restored.snapshot(), snapshot);
+        assert_eq!(restored.get("slot").unwrap().next_record_id(), 3);
+
+        let mut invalid = snapshot;
+        invalid.stores.get_mut("slot").unwrap().next_id = 2;
+        assert!(RmsRuntime::from_snapshot(invalid).is_err());
+    }
+
+    #[test]
+    fn set_delete_list_and_quota_follow_midp_semantics() {
+        let mut rms = RmsRuntime::with_capacity(Some(5));
+        rms.open("z", true).unwrap();
+        rms.open("a", true).unwrap();
+        assert_eq!(rms.list_record_stores(), vec!["a", "z"]);
+        let id = rms.add_record("z", &[1, 2, 3], 0, 3).unwrap();
+        assert_eq!(rms.size_available(), 2);
+        assert!(rms.add_record("z", &[4, 5, 6], 0, 3).is_err());
+        rms.set_record("z", id, &[8, 9], 0, 2).unwrap();
+        assert_eq!(rms.get("z").unwrap().get_record(id).unwrap(), vec![8, 9]);
+        assert_eq!(rms.size_available(), 3);
+        rms.delete_record("z", id).unwrap();
+        assert_eq!(rms.get("z").unwrap().next_record_id(), 2);
+        assert_eq!(rms.size_available(), 5);
     }
 }

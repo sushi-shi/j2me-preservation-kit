@@ -59,9 +59,20 @@ exact revision. Generated games must never carry copied portable crate trees.
 The scaffold also carries the reusable byte-level corpus classifier, content
 resource catalog, dual-decompiler driver, numeric-opcode authority, canonical
 Java compiler/packager, bytecode-bound semantic-symbol ledger validator, and
-Java ME API stubs. Their game-specific facts live in `game.toml [java]` and
+Java ME API stubs. Its conservative device-evidence audit inventories
+device-sensitive calls and same-method constants without guessing a handset.
+Whole-port gates additionally close Java-field ownership,
+production Rust declaration ownership, semantic call paths, reviewed build
+variants, and optional linked-binary/oracle reachability. Their game-specific
+facts live in `game.toml [java]` and
 `java/reconstruction/symbols.toml`; empty Phase-0 values intentionally keep
 Phase-2 checks red until a baseline and canonical class closure are reviewed.
+
+Per-class admission plumbing is declarative. After canonical Java and strict
+Rust items exist, add one plan under `java/reconstruction/admissions/`, run
+`just admission-scaffold <plan>`, and use `admission-inventory`/`admission-check`.
+The generator derives whole-game denominators and live variant observations
+from the originals and refuses to overwrite reviewed files.
 
 ## License
 
@@ -74,8 +85,12 @@ their respective rightsholders.
 ## Status
 
 Phase 0 (resource-free foundation) is scaffolded together with the reusable
-Phase-3 support layers: `j2me-codec`, `j2me-jvm`, `j2me-canvas`, `j2me-me`, the
-line-oracle engine, and both real AST walkers. The generated game translation is
+2D support layers: JVM/MIDP semantics, composable device profiles, the opt-in
+Nokia device/UI crates, AMR/MIDI/SMAF/WAV codecs and DSP, classpath/RMS/
+presentation/lifecycle host core, an explicit handset system-environment axis,
+default-deny HTTP/SMS seams, and separate native/browser adapters. The
+architecture, device-assignment, oracle, AST, and whole-port completeness gates
+keep those boundaries reviewable. The generated game translation is
 still an honest zero-coverage adapter. See `docs/STATUS.md` and the provenance
 authority `java/reconstruction/builds.toml`; Phase 1 onward follows
 `../PLAYBOOK.md`.

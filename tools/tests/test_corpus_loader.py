@@ -32,7 +32,7 @@ class CorpusLoaderTests(unittest.TestCase):
             previous = CORPUS.ORIGINALS
             CORPUS.ORIGINALS = originals
             try:
-                self.assertEqual(payload, CORPUS._resolve_payload_bytes(entry))
+                self.assertEqual(payload, CORPUS.payload_bytes(entry))
             finally:
                 CORPUS.ORIGINALS = previous
 

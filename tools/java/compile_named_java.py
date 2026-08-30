@@ -158,8 +158,7 @@ def validate_jar(path: Path) -> None:
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         app_classes = sorted(name for name in names if name.endswith(".class"))
-        if any(name.startswith("javax/") for name in names):
-            raise ValueError("Java ME API stub leaked into application JAR")
+        validate_no_stub_entries(names)
         if app_classes != CANONICAL_CLASS_ENTRIES:
             raise ValueError(f"application class closure differs: {app_classes}")
         manifest = archive.read("META-INF/MANIFEST.MF")
@@ -168,6 +167,11 @@ def validate_jar(path: Path) -> None:
             raise ValueError("manifest does not select the canonical MIDlet")
         if len(names) < MINIMUM_JAR_ENTRIES:
             raise ValueError("resource merge is vacuous")
+
+
+def validate_no_stub_entries(names: list[str]) -> None:
+    if any(name.startswith("javax/") for name in names):
+        raise ValueError("Java ME API stub leaked into application JAR")
 
 
 def build_jar(destination: Path) -> None:
@@ -183,8 +187,20 @@ def self_test() -> int:
         root = Path(temporary)
         first = root / "first.jar"
         second = root / "second.jar"
-        build_jar(first)
-        build_jar(second)
+        complete_jar_config = bool(
+            CANONICAL_MIDLET and CANONICAL_CLASS_ENTRIES and MINIMUM_JAR_ENTRIES > 0
+        )
+        if complete_jar_config:
+            build_jar(first)
+            build_jar(second)
+        else:
+            # Phase-2 projects can typecheck admitted classes before the MIDlet
+            # closure exists. Keep the reusable determinism/stub-leak negative
+            # control live without pretending that a runnable game JAR exists.
+            for destination in (first, second):
+                with zipfile.ZipFile(destination, "w") as archive:
+                    archive.writestr(jar_info("META-INF/MANIFEST.MF"), b"Manifest-Version: 1.0\r\n")
+                    archive.writestr(jar_info("fixture/Partial.class"), b"fixture")
         if hashlib.sha256(first.read_bytes()).digest() != hashlib.sha256(second.read_bytes()).digest():
             raise SystemExit("java-build self-test FAIL: two clean builds differ")
         bad = root / "bad.jar"
@@ -192,13 +208,20 @@ def self_test() -> int:
         with zipfile.ZipFile(bad, "a") as archive:
             archive.writestr(jar_info("javax/microedition/Fake.class"), b"not a class")
         try:
-            validate_jar(bad)
+            if complete_jar_config:
+                validate_jar(bad)
+            else:
+                with zipfile.ZipFile(bad) as archive:
+                    validate_no_stub_entries(archive.namelist())
         except ValueError as error:
             if "stub leaked" not in str(error):
                 raise
         else:
             raise SystemExit("java-build self-test FAIL: injected API stub was accepted")
-    print("java-build self-test OK: builds are deterministic and an injected API stub is rejected")
+    scope = "configured game JAR" if complete_jar_config else "partial-recovery fixture JAR"
+    print(
+        f"java-build self-test OK: {scope} is deterministic and an injected API stub is rejected"
+    )
     return 0
 
 

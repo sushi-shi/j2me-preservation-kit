@@ -1,7 +1,7 @@
 //! Deterministic MIDP Graphics operations over a neutral ARGB image:
-//! `setColor`/clip/`translate`/`fillRect`/`drawRect`/`drawLine`/`drawImage`/
-//! `drawRegion` (with `GraphicsError` and `SpriteTransform`), the MIDP
-//! `drawArc` / `fillArc` ellipse-sector rasteriser, and a public
+//! `setColor`/clip/`translate`/`fillRect`/`drawRect`/`drawLine`/`fillTriangle`/
+//! rounded rectangles/`drawImage`/`drawRegion` (with `GraphicsError` and
+//! `SpriteTransform`), the MIDP `drawArc` / `fillArc` ellipse-sector rasteriser, and a public
 //! [`anchor_top_left`] anchor resolver.
 
 use j2me_canvas::Image;
@@ -264,6 +264,129 @@ impl<'a> Graphics<'a> {
         );
     }
 
+    /// `Graphics.fillTriangle`: fill the closed triangle using doubled integer
+    /// pixel-centre tests. The bounding box is intersected with the live clip
+    /// before iteration, so hostile coordinates cannot create an unbounded
+    /// host loop.
+    #[allow(clippy::too_many_arguments)]
+    pub fn fill_triangle(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, x3: i32, y3: i32) {
+        let vertices = [
+            (
+                x1.wrapping_add(self.translate_x),
+                y1.wrapping_add(self.translate_y),
+            ),
+            (
+                x2.wrapping_add(self.translate_x),
+                y2.wrapping_add(self.translate_y),
+            ),
+            (
+                x3.wrapping_add(self.translate_x),
+                y3.wrapping_add(self.translate_y),
+            ),
+        ];
+        let min_x = vertices.iter().map(|point| point.0).min().unwrap();
+        let max_x = vertices.iter().map(|point| point.0).max().unwrap();
+        let min_y = vertices.iter().map(|point| point.1).min().unwrap();
+        let max_y = vertices.iter().map(|point| point.1).max().unwrap();
+        let bounds = Rect {
+            x: min_x,
+            y: min_y,
+            width: max_x.saturating_sub(min_x).saturating_add(1),
+            height: max_y.saturating_sub(min_y).saturating_add(1),
+        }
+        .intersect(self.clip)
+        .intersect(self.full_bounds());
+
+        let doubled = vertices.map(|(x, y)| (i128::from(x) * 2, i128::from(y) * 2));
+        let edge = |a: (i128, i128), b: (i128, i128), p: (i128, i128)| {
+            (p.0 - a.0) * (b.1 - a.1) - (p.1 - a.1) * (b.0 - a.0)
+        };
+        for y in bounds.y..bounds.y + bounds.height {
+            for x in bounds.x..bounds.x + bounds.width {
+                let point = (i128::from(x) * 2 + 1, i128::from(y) * 2 + 1);
+                let edges = [
+                    edge(doubled[0], doubled[1], point),
+                    edge(doubled[1], doubled[2], point),
+                    edge(doubled[2], doubled[0], point),
+                ];
+                if !edges.iter().any(|value| *value < 0) || !edges.iter().any(|value| *value > 0) {
+                    self.target.set(x, y, self.color);
+                }
+            }
+        }
+    }
+
+    pub fn fill_round_rect(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        arc_width: i32,
+        arc_height: i32,
+    ) {
+        self.round_rect(x, y, width, height, arc_width, arc_height, true);
+    }
+
+    pub fn draw_round_rect(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        arc_width: i32,
+        arc_height: i32,
+    ) {
+        self.round_rect(x, y, width, height, arc_width, arc_height, false);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn round_rect(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        arc_width: i32,
+        arc_height: i32,
+        fill: bool,
+    ) {
+        if width <= 0 || height <= 0 {
+            return;
+        }
+        let left = x.wrapping_add(self.translate_x);
+        let top = y.wrapping_add(self.translate_y);
+        let bounds = Rect {
+            x: left,
+            y: top,
+            width,
+            height,
+        }
+        .intersect(self.clip)
+        .intersect(self.full_bounds());
+        let arc_width = arc_width.saturating_abs().min(width);
+        let arc_height = arc_height.saturating_abs().min(height);
+        let inside = |px: i32, py: i32| {
+            rounded_rect_contains(px, py, left, top, width, height, arc_width, arc_height)
+        };
+        for py in bounds.y..bounds.y + bounds.height {
+            for px in bounds.x..bounds.x + bounds.width {
+                if !inside(px, py) {
+                    continue;
+                }
+                if !fill
+                    && inside(px.wrapping_sub(1), py)
+                    && inside(px.wrapping_add(1), py)
+                    && inside(px, py.wrapping_sub(1))
+                    && inside(px, py.wrapping_add(1))
+                {
+                    continue;
+                }
+                self.target.set(px, py, self.color);
+            }
+        }
+    }
+
     /// `fillArc(x, y, w, h, startAngle, arcAngle)` — the filled ellipse sector
     /// inscribed in the `w×h` box, current opaque color, clipped. A full sweep
     /// (`|arc| >= 360`) fills the whole inscribed ellipse; a partial sweep is a
@@ -523,6 +646,58 @@ fn angle_in(nx: f64, ny: f64, start: f64, span: f64) -> bool {
     (ang - start).rem_euclid(360.0) <= span
 }
 
+#[allow(clippy::too_many_arguments)]
+fn rounded_rect_contains(
+    px: i32,
+    py: i32,
+    left: i32,
+    top: i32,
+    width: i32,
+    height: i32,
+    arc_width: i32,
+    arc_height: i32,
+) -> bool {
+    let right = i64::from(left) + i64::from(width);
+    let bottom = i64::from(top) + i64::from(height);
+    if i64::from(px) < i64::from(left)
+        || i64::from(py) < i64::from(top)
+        || i64::from(px) >= right
+        || i64::from(py) >= bottom
+    {
+        return false;
+    }
+    if arc_width <= 1 || arc_height <= 1 {
+        return true;
+    }
+
+    let radius_x = f64::from(arc_width) / 2.0;
+    let radius_y = f64::from(arc_height) / 2.0;
+    let sample_x = f64::from(px) + 0.5;
+    let sample_y = f64::from(py) + 0.5;
+    let inner_left = f64::from(left) + radius_x;
+    let inner_right = right as f64 - radius_x;
+    let inner_top = f64::from(top) + radius_y;
+    let inner_bottom = bottom as f64 - radius_y;
+    if sample_x >= inner_left && sample_x < inner_right
+        || sample_y >= inner_top && sample_y < inner_bottom
+    {
+        return true;
+    }
+    let center_x = if sample_x < inner_left {
+        inner_left
+    } else {
+        inner_right
+    };
+    let center_y = if sample_y < inner_top {
+        inner_top
+    } else {
+        inner_bottom
+    };
+    let dx = (sample_x - center_x) / radius_x;
+    let dy = (sample_y - center_y) / radius_y;
+    dx * dx + dy * dy <= 1.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,6 +746,22 @@ mod tests {
             graphics.draw_region_raw(&source, 0, 0, 1, 1, 8, 0, 0, 0),
             Err(GraphicsError::InvalidTransform(8))
         );
+    }
+
+    #[test]
+    fn postal_primitives_fill_triangles_and_round_corners() {
+        let mut target = Image::create_mutable(9, 9).unwrap();
+        {
+            let mut graphics = Graphics::new(&mut target);
+            graphics.set_color(0x00ff00);
+            graphics.fill_triangle(1, 1, 7, 1, 4, 7);
+            graphics.set_color(0xff0000);
+            graphics.fill_round_rect(0, 0, 5, 5, 5, 5);
+        }
+        assert_eq!(target.get(5, 2), Some(0xff00_ff00));
+        assert_eq!(target.get(4, 5), Some(0xff00_ff00));
+        assert_eq!(target.get(2, 2), Some(0xffff_0000));
+        assert_eq!(target.get(0, 0), Some(0xffff_ffff));
     }
 }
 

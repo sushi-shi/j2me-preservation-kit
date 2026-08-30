@@ -64,8 +64,10 @@ pub enum JavaError {
     NegativeArraySize { length: i32 },
     Arithmetic,
     IllegalArgument(&'static str),
+    IllegalState(&'static str),
     ClassCast,
     Io(String),
+    ConnectionNotFound(String),
     RecordStore(String),
     Media(String),
 }
@@ -86,8 +88,12 @@ impl fmt::Display for JavaError {
             Self::IllegalArgument(message) => {
                 write!(formatter, "IllegalArgumentException: {message}")
             }
+            Self::IllegalState(message) => write!(formatter, "IllegalStateException: {message}"),
             Self::ClassCast => write!(formatter, "ClassCastException"),
             Self::Io(message) => write!(formatter, "IOException: {message}"),
+            Self::ConnectionNotFound(message) => {
+                write!(formatter, "ConnectionNotFoundException: {message}")
+            }
             Self::RecordStore(message) => {
                 write!(formatter, "RecordStoreException: {message}")
             }

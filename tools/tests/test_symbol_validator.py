@@ -23,6 +23,15 @@ class SymbolValidatorTests(unittest.TestCase):
             with self.assertRaises(VALIDATOR.SymbolError):
                 VALIDATOR.semantic_name(name, "test")
 
+    def test_symbol_ledger_cannot_shrink_the_game_denominator(self) -> None:
+        with self.assertRaises(VALIDATOR.SymbolError):
+            VALIDATOR.require_baseline_closure(
+                {"baseline_classes": ["Main"]}, ["Main", "GameCanvas"]
+            )
+        VALIDATOR.require_baseline_closure(
+            {"baseline_classes": ["Main", "GameCanvas"]}, ["Main", "GameCanvas"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,12 +1,11 @@
 # j2me-input
 
-Generic, remappable native-key → Nokia `FullCanvas` key-code mapping for J2ME
-ports. This is the single place a native host translates a physical `winit`
-`KeyCode` into the fixed, game-agnostic Nokia vocabulary a transliterated
-`keyPressed(int)` expects, so every port inherits sane, remappable controls
-instead of hand-copying a per-game keymap.
+Generic, remappable physical-key → semantic handset-key mapping for J2ME ports.
+The selected `j2me-device::InputFragment` performs the second hop to the raw
+integer delivered to Java. Consequently desktop ergonomics and phone behavior
+remain independently visible and testable.
 
-## The Nokia vocabulary
+## Nokia compatibility
 
 | key            | code    |
 |----------------|---------|
@@ -16,15 +15,16 @@ instead of hand-copying a per-game keymap.
 | digits 0–9     | 48..=57 |
 | `*` / `#`      | 42 / 35 |
 
-Anything outside this set is rejected by the device event queue (R10), so an
-unknown or unmapped key resolves to `None` and the host drops it.
+The legacy `nokia_code` helpers remain as explicitly named compatibility
+wrappers over the opt-in `j2me-device-nokia` implementation. New hosts call
+`Keymap::raw_code(key, &profile.input)`.
 
 ## Presets
 
 - **`Preset::Standard`** — Arrows = D-pad, Enter/Space = Fire, F1/F2 = soft keys,
   number row + numpad = digits, `[`/`]`/`\`/numpad-`*` = `*`/`#`.
 - **`Preset::Mobile`** (default) — everything in `Standard` **plus** a left-hand
-  cluster mirroring gothic-mobile's and stalker-mobile's keymaps: W/A/S/D move,
+  cluster mirroring the established preservation-port keymaps: W/A/S/D move,
   Q/E soft keys, X fires, R/F reach `*`/`#`. A strict superset — every `Standard`
   binding still works.
 
@@ -57,13 +57,13 @@ use j2me_input::{Keymap, KeyCode, Preset};
 let keymap = Keymap::from_config(player_config /* Option<&str> */, Preset::Mobile)?;
 
 // In the winit keyboard handler:
-if let Some(code) = keymap.nokia_code(physical_key) {
+if let Some(code) = keymap.raw_code(physical_key, &device_profile.input) {
     canvas.key_pressed(code); // feed the transliterated keyPressed(int)
 }
 ```
 
-A port that today hand-writes a `nokia_code(KeyCode) -> Option<i32>` swaps the
-whole function for one `Keymap` built at start-up plus one `keymap.nokia_code`
-call at the event site — same codes, now remappable and shared across ports.
+A port that hand-writes a key-code function replaces it with a `Keymap` and a
+reviewed device profile. Raw numeric config overrides remain available for a
+phone with nonstandard codes; named bindings stay portable.
 
 Part of the J2ME Preservation Kit. Licensed CC0-1.0.

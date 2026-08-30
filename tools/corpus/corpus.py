@@ -62,7 +62,7 @@ def jar_entries(manifest: dict) -> list[tuple[str, dict]]:
     return sorted(rows, key=lambda row: (row[1].get("id") != baseline, row[1]["id"]))
 
 
-def _resolve_payload_bytes(entry: dict) -> bytes:
+def payload_bytes(entry: dict) -> bytes:
     wanted = entry["sha256"]
     for reference in entry.get("containers", []):
         if not reference.startswith("_originals/"):
@@ -96,11 +96,17 @@ def _resolve_payload_bytes(entry: dict) -> bytes:
     )
 
 
+# Compatibility for already-stamped projects/tests that imported the original
+# private spelling before the device-evidence audit needed a public helper.
+def _resolve_payload_bytes(entry: dict) -> bytes:
+    return payload_bytes(entry)
+
+
 def builds() -> list[Build]:
     manifest = load_manifest()
     result = []
     for collection, entry in jar_entries(manifest):
-        payload = _resolve_payload_bytes(entry)
+        payload = payload_bytes(entry)
         if len(payload) != entry["bytes"]:
             raise CorpusError(f"{entry['id']}: byte count does not match builds.toml")
         try:

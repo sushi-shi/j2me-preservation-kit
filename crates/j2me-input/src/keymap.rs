@@ -3,6 +3,7 @@
 
 use crate::config::{self, ConfigError};
 use crate::preset::Preset;
+use j2me_device::{HandsetKey, InputFragment};
 use std::collections::HashMap;
 use winit::keyboard::KeyCode;
 
@@ -16,7 +17,14 @@ use winit::keyboard::KeyCode;
 pub struct Keymap {
     preset: Preset,
     /// `Some(code)` rebinds a key; `None` explicitly unbinds it.
-    overrides: HashMap<KeyCode, Option<i32>>,
+    overrides: HashMap<KeyCode, Option<KeyBinding>>,
+}
+
+/// A portable semantic binding or an explicitly device-specific raw override.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyBinding {
+    Handset(HandsetKey),
+    Raw(i32),
 }
 
 impl Keymap {
@@ -33,17 +41,41 @@ impl Keymap {
         self.preset
     }
 
-    /// The raw Nokia code for `key`, or `None` if nothing binds it.
-    pub fn nokia_code(&self, key: KeyCode) -> Option<i32> {
+    /// Resolve a physical key before applying any phone-specific raw codes.
+    pub fn binding(&self, key: KeyCode) -> Option<KeyBinding> {
         match self.overrides.get(&key) {
             Some(&binding) => binding,
-            None => self.preset.nokia_code(key),
+            None => self.preset.handset_key(key).map(KeyBinding::Handset),
+        }
+    }
+
+    /// Map through the selected handset profile to the integer Java receives.
+    pub fn raw_code(&self, key: KeyCode, profile: &InputFragment) -> Option<i32> {
+        match self.binding(key)? {
+            KeyBinding::Handset(key) => profile.key_code(key),
+            KeyBinding::Raw(code) => Some(code),
+        }
+    }
+
+    /// The raw Nokia code for `key`, or `None` if nothing binds it.
+    pub fn nokia_code(&self, key: KeyCode) -> Option<i32> {
+        match self.binding(key)? {
+            KeyBinding::Handset(key) => crate::nokia::code(key),
+            KeyBinding::Raw(code) if crate::nokia::is_vocabulary(code) => Some(code),
+            KeyBinding::Raw(_) => None,
         }
     }
 
     /// Override `key` to deliver `code`. Chainable.
     pub fn bind(&mut self, key: KeyCode, code: i32) -> &mut Self {
-        self.overrides.insert(key, Some(code));
+        self.overrides.insert(key, Some(KeyBinding::Raw(code)));
+        self
+    }
+
+    /// Override a physical key with a device-independent handset key.
+    pub fn bind_handset(&mut self, key: KeyCode, handset: HandsetKey) -> &mut Self {
+        self.overrides
+            .insert(key, Some(KeyBinding::Handset(handset)));
         self
     }
 
@@ -98,6 +130,34 @@ mod tests {
         assert_eq!(km.nokia_code(K::KeyW), Some(nokia::UP)); // preset default
         km.bind(K::KeyW, nokia::FIRE);
         assert_eq!(km.nokia_code(K::KeyW), Some(nokia::FIRE)); // override applied
+    }
+
+    #[test]
+    fn semantic_binding_uses_the_selected_phone_codes() {
+        let mut km = Keymap::new(Preset::Standard);
+        km.bind_handset(K::KeyH, HandsetKey::Fire);
+        let profile = InputFragment {
+            up: 10,
+            down: 11,
+            left: 12,
+            right: 13,
+            fire: 99,
+            soft_left: 20,
+            soft_right: 21,
+            star: 42,
+            pound: 35,
+            digits: [30, 31, 32, 33, 34, 35, 36, 37, 38, 39],
+            game_action_up: vec![],
+            game_action_down: vec![],
+            game_action_left: vec![],
+            game_action_right: vec![],
+            game_action_fire: vec![],
+            pointer_events: false,
+            pointer_motion_events: false,
+            repeat_events: false,
+        };
+        assert_eq!(km.raw_code(K::KeyH, &profile), Some(99));
+        assert_eq!(km.raw_code(K::ArrowUp, &profile), Some(10));
     }
 
     #[test]

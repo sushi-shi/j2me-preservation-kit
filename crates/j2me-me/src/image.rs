@@ -1,5 +1,6 @@
-//! `javax.microedition.lcdui.Image` factory paths that turn ENCODED bytes into
-//! pixels: `createImage(byte[], int, int)` and `createImage(String)`.
+//! `javax.microedition.lcdui.Image` factory paths that turn encoded bytes or an
+//! ARGB array into pixels: `createImage(byte[], int, int)`,
+//! `createImage(InputStream)`, `createImage(String)`, and `createRGBImage`.
 //!
 //! The neutral [`j2me_canvas::Image`] owns the ARGB buffer and stays codec-free,
 //! so the mutable/from-pixels constructors (`createImage(w, h)` =
@@ -66,6 +67,55 @@ pub fn create_image_region(
     let end = start + image_length as usize;
     let bytes: Vec<u8> = image_data[start..end].iter().map(|&b| b as u8).collect();
     decode_png(&bytes)
+}
+
+/// `Image.createImage(InputStream)`: decode all bytes the Java stream adapter
+/// read. Stream cursor and read failures remain the caller's responsibility;
+/// once those bytes exist, image validation is identical to the byte-array
+/// overload.
+pub fn create_image_stream(bytes: &[i8]) -> Result<Image, JavaError> {
+    create_image_region(bytes, 0, bytes.len() as i32)
+}
+
+/// `Image.createRGBImage`: copy the first `width * height` packed Java ARGB
+/// values into a new immutable image. When `processAlpha` is false the API
+/// treats every pixel as opaque while preserving its RGB channels.
+pub fn create_rgb_image(
+    rgb: &[i32],
+    width: i32,
+    height: i32,
+    process_alpha: bool,
+) -> Result<Image, JavaError> {
+    if width <= 0 || height <= 0 {
+        return Err(JavaError::IllegalArgument(
+            "createRGBImage: dimensions must be positive",
+        ));
+    }
+    let expected = i64::from(width)
+        .checked_mul(i64::from(height))
+        .filter(|count| *count <= i64::from(i32::MAX))
+        .ok_or(JavaError::IllegalArgument(
+            "createRGBImage: dimensions overflow",
+        ))? as usize;
+    if rgb.len() < expected {
+        return Err(JavaError::ArrayIndexOutOfBounds {
+            index: expected.saturating_sub(1).min(i32::MAX as usize) as i32,
+            length: rgb.len().min(i32::MAX as usize) as i32,
+        });
+    }
+    let pixels = rgb[..expected]
+        .iter()
+        .map(|pixel| {
+            let pixel = *pixel as u32;
+            if process_alpha {
+                pixel
+            } else {
+                pixel | 0xff00_0000
+            }
+        })
+        .collect();
+    Image::from_argb(width, height, pixels)
+        .map_err(|_| JavaError::IllegalArgument("createRGBImage: invalid pixel buffer"))
 }
 
 /// `Image.createImage(String name)` — load a named resource (e.g. a localized
@@ -188,6 +238,22 @@ mod tests {
         assert!(!img.is_mutable(), "a decoded image is immutable");
         assert_eq!(img.get(0, 0), Some(0xFFFF_0000));
         assert_eq!(img.get(1, 0), Some(0x8000_FF00));
+    }
+
+    #[test]
+    fn stream_and_rgb_factories_preserve_their_distinct_contracts() {
+        let png = rgba_png(1, 1, &[10, 20, 30, 128]);
+        let decoded = create_image_stream(&png).unwrap();
+        assert_eq!(decoded.get(0, 0), Some(0x800a_141e));
+
+        let opaque = create_rgb_image(&[0x0012_3456], 1, 1, false).unwrap();
+        assert_eq!(opaque.get(0, 0), Some(0xff12_3456));
+        let alpha = create_rgb_image(&[0x8012_3456_u32 as i32], 1, 1, true).unwrap();
+        assert_eq!(alpha.get(0, 0), Some(0x8012_3456));
+        assert!(matches!(
+            create_rgb_image(&[], 1, 1, true),
+            Err(JavaError::ArrayIndexOutOfBounds { .. })
+        ));
     }
 
     #[test]

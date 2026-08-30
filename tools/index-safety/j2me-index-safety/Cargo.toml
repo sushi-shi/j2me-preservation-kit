@@ -1,0 +1,23 @@
+# Standalone crate (own [workspace]) so it needs no entry in the game's root
+# Cargo.toml and shares no lockfile — a stampable, generic tool. The same
+# src/main.rs compiles under syn 2 and syn 3; this template pins the syn 2 the
+# preservation kit uses, and a game may bump it to match its own workspace.
+[package]
+name = "j2me-index-safety"
+version = "0.1.0"
+edition = "2021"
+license = "CC0-1.0"
+publish = false
+
+[[bin]]
+name = "j2me-index-safety"
+path = "src/main.rs"
+
+[dependencies]
+# `span-locations` gives real 1-based line numbers when parsing a file outside a
+# proc-macro context; without it every span reports line 0.
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = { version = "1", features = ["span-locations"] }
+
+[workspace]

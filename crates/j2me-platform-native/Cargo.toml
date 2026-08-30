@@ -1,0 +1,23 @@
+[package]
+name = "j2me-platform-native"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Native desktop adapters for the J2ME preservation runtime"
+readme = "README.md"
+keywords = ["j2me", "midp", "native", "audio", "winit"]
+categories = ["game-development", "emulators", "multimedia::audio"]
+
+[dependencies]
+cpal = { version = "0.18.2", default-features = false }
+j2me-device = { path = "../j2me-device", version = "0.1.0" }
+j2me-input = { path = "../j2me-input", version = "0.1.0" }
+j2me-me = { path = "../j2me-me", version = "0.1.0" }
+j2me-media = { path = "../j2me-media", version = "0.1.0" }
+j2me-platform = { path = "../j2me-platform", version = "0.1.0" }
+winit = "0.30"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"

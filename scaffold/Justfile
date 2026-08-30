@@ -13,6 +13,7 @@ bootstrap resources:
     just originals-verify
     just classify
     just catalog
+    just device-evidence
 
 # Verify the materialized _originals against builds.toml's sha256/bytes table.
 originals-verify:
@@ -34,6 +35,14 @@ catalog:
 
 catalog-canfail:
     python3 tools/corpus/catalog_resources.py --self-test
+
+# Original-bytecode review queue for device-sensitive calls, raw constants,
+# manifest/JAD headers, and vendor APIs. It never chooses a phone profile.
+device-evidence:
+    python3 tools/device/audit_evidence.py
+
+device-evidence-canfail:
+    python3 tools/device/audit_evidence.py --self-test
 
 # Generated evidence only: JADX primary, CFR cross-check.
 decompile build="":
@@ -102,6 +111,35 @@ crosswalk-fixture-canfail:
         tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_literal_index_parity_catches_wrong_column \
         tools.tests.test_crosswalk_validator.CrosswalkValidatorTests.test_temporal_interleave_waiver_removal_is_rejected
 
+# Phase-3 whole-port denominators. Create the game-owned manifests as the Rust
+# translation lands; the reusable can-fail controls are valid from Phase 0.
+port-completeness manifest:
+    python3 tools/port/validate_completeness.py {{quote(manifest)}}
+
+native-reachability manifest:
+    python3 tools/port/native_reachability.py {{quote(manifest)}}
+
+variants-check manifest:
+    python3 tools/port/validate_variants.py {{quote(manifest)}}
+
+port-gates-canfail:
+    python3 tools/port/validate_completeness.py --self-test
+    python3 tools/port/native_reachability.py --self-test
+    python3 tools/port/validate_variants.py --self-test
+    python3 -m unittest tools.tests.test_port_gates
+
+architecture-check:
+    python3 tools/architecture/validate_layers.py
+
+architecture-canfail:
+    python3 tools/architecture/validate_layers.py --self-test
+
+device-profiles-check:
+    python3 tools/device/validate_profiles.py
+
+device-profiles-canfail:
+    python3 tools/device/validate_profiles.py --self-test
+
 # Regenerate builds.toml provenance from a resources dir (mechanical facts only;
 # the judgment calls stay flagged for Phase 1 — see the file header).
 gen-builds resources match:
@@ -137,13 +175,20 @@ check:
     just originals-verify
     just classify
     just catalog
+    just device-evidence
     just originals-verify-canfail
     just classify-canfail
     just catalog-canfail
+    just device-evidence-canfail
     just oracle-harness-canfail
     just crosswalk-check
     just crosswalk-canfail
     just crosswalk-fixture-canfail
+    just port-gates-canfail
+    just architecture-check
+    just architecture-canfail
+    just device-profiles-check
+    just device-profiles-canfail
     if [ -d tools/tests ]; then python3 -m unittest discover -s tools/tests; fi
     if [ -f Cargo.toml ]; then cargo fmt --all --check; fi
     if [ -f Cargo.toml ]; then cargo clippy --workspace --all-targets -- -D warnings; fi

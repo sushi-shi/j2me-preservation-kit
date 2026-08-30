@@ -1,6 +1,7 @@
 package javax.microedition.lcdui;
 
 import java.io.IOException;
+import java.io.InputStream;
 
 public class Image {
     protected Image() {}
@@ -13,11 +14,19 @@ public class Image {
         return new Image();
     }
 
+    public static Image createImage(InputStream stream) throws IOException {
+        return new Image();
+    }
+
     public static Image createImage(byte[] imageData, int imageOffset, int imageLength) {
         return new Image();
     }
 
     public static Image createImage(Image source) {
+        return new Image();
+    }
+
+    public static Image createRGBImage(int[] rgb, int width, int height, boolean processAlpha) {
         return new Image();
     }
 

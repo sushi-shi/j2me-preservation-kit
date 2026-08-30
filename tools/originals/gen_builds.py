@@ -274,6 +274,7 @@ def main(argv: list[str]) -> int:
             lines.append(f"resolution = {toml_str(res)}")
         if dev:
             lines.append(f"device = {toml_str(dev)}")
+        lines.append('device_profile = ""   # TODO Phase 1: reviewed id from device-profiles.toml')
         lines.append(f"declared_language = {toml_str(lang)}   "
                      f"# HINT from filename/manifest; verify from content (R10)")
         lines.append("official = true   # TODO Phase 1: set false + move to "

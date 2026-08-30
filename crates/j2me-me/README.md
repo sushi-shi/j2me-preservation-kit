@@ -6,19 +6,23 @@ only** (no M3G / JSR-184).
 
 It provides the device-runtime surface a strict 2D port draws on:
 
-- **`graphics`** — `setColor` / clip / `translate` / `fillRect` / `drawRect` /
-  `drawLine` / `drawImage` / `drawRegion` plus the `drawArc` / `fillArc` ellipse
-  sector rasteriser (`Graphics`, `GraphicsError`, `SpriteTransform`);
+- **`graphics`** — `setColor` / clip / `translate`, lines, rectangles, rounded
+  rectangles, triangles, images and regions, plus the `drawArc` / `fillArc`
+  ellipse sector rasteriser (`Graphics`, `GraphicsError`, `SpriteTransform`);
 - **`canvas`** — the `Canvas` / `Display` serial paint-input queue and the
-  `Displayable` surface trait, including ordered subclass lifecycle callbacks.
-  `Display::set_current_notifying` and `clear_current_notifying` update
-  visibility and dispatch the game subclass's
-  protected `hideNotify` / `showNotify` callbacks without owning game policy;
+  `Displayable` surface trait, including pointer, resize, repeat-key, and
+  soft-command callbacks. `Display::set_current_notifying` and
+  `clear_current_notifying` update visibility and dispatch the game subclass's
+  ordered `showNotify` / `hideNotify` callbacks, preserving partial state when
+  a callback fails;
 - **`media`** — the MMAPI player model with `VolumeControl`, a `PlayerListener`
   registration, and the `getState()` integers;
-- **`rms`** — the monotonic-record-id `RecordStore`;
-- **`image`** — the `Image.createImage(byte[])` / `createImage(String)`
-  PNG-decode factories.
+- **`midlet`** — the two-phase MIDlet lifecycle boundary, without inventing
+  desktop focus policy;
+- **`rms`** — the monotonic-record-id `RecordStore` plus a deterministic
+  host-facing snapshot seam;
+- **`image`** — byte-array/stream/named-resource PNG factories and
+  `Image.createRGBImage`.
 
 ## Where it sits
 

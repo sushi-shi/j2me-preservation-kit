@@ -1,0 +1,10 @@
+# Game-owned handset capability evidence. Future generated projects fill the
+# independent fragments below after reviewing their build matrix. Portable
+# code parses and validates this file; `_template` ships no guessed vendor
+# profiles based on one game.
+schema_version = 1
+
+# See `crates/j2me-device/README.md` and its test fixture for the complete
+# nine-axis fragment/profile shape. Empty catalogs are valid during Phase 0;
+# selecting a build without an assigned reviewed profile remains an
+# application-level error.

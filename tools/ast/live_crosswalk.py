@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -139,6 +140,27 @@ def checked_report(manifest: dict, evidence: dict) -> validate_crosswalk.Report:
     )
 
 
+def inventory_json(evidence: dict) -> str:
+    """Return deterministic, machine-readable live AST evidence for review."""
+
+    review = copy.deepcopy(evidence)
+    for body in review.get("body", []):
+        java_nodes = body.get("java_nodes", [])
+        body["java_node_count"] = len(java_nodes)
+        body["java_nodes_sha256"] = validate_crosswalk.node_inventory_digest(java_nodes)
+        body["java_nodes"] = [
+            {"index": index, "node": node} for index, node in enumerate(java_nodes)
+        ]
+        for target in body.get("rust", []):
+            rust_nodes = target.get("nodes", [])
+            target["node_count"] = len(rust_nodes)
+            target["nodes_sha256"] = validate_crosswalk.node_inventory_digest(rust_nodes)
+            target["nodes"] = [
+                {"index": index, "node": node} for index, node in enumerate(rust_nodes)
+            ]
+    return json.dumps(review, indent=2, sort_keys=True) + "\n"
+
+
 def run_gate(
     *,
     label: str,
@@ -148,6 +170,9 @@ def run_gate(
 ) -> int:
     try:
         manifest, evidence = live_evidence(manifest_path, specs)
+        if argv == ["--inventory"]:
+            print(inventory_json(evidence), end="")
+            return 0
         report = checked_report(manifest, evidence)
         if report.errors:
             raise LiveCrosswalkError("\n".join(report.errors))

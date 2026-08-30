@@ -23,6 +23,8 @@ except ModuleNotFoundError:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parents[2]
 LEDGER = ROOT / "java" / "reconstruction" / "symbols.toml"
+with (ROOT / "game.toml").open("rb") as handle:
+    GAME_CONFIG = tomllib.load(handle)
 sys.path.insert(0, str(ROOT / "tools" / "corpus"))
 
 import classfile  # noqa: E402
@@ -92,19 +94,34 @@ def unique_rows(rows: list[dict], kind: str) -> dict[tuple[str, str, str], dict]
     return result
 
 
+def require_baseline_closure(document: dict, expected: list[str]) -> None:
+    configured = document.get("baseline_classes", [])
+    if configured != expected or len(configured) != len(set(configured)):
+        raise SymbolError(
+            "symbols.toml baseline_classes must exactly equal game.toml "
+            "[java].baseline_classes"
+        )
+
+
 def validate(document: dict) -> str:
     if document.get("schema_version") != 1:
         raise SymbolError("symbols.toml schema_version must be 1")
+    require_baseline_closure(
+        document, GAME_CONFIG.get("java", {}).get("baseline_classes", [])
+    )
     original = baseline_classes()
-    classes = {row["original"]: row for row in document.get("class", [])}
+    class_rows = document.get("class", [])
+    classes = {row["original"]: row for row in class_rows}
+    if len(classes) != len(class_rows):
+        raise SymbolError("duplicate class owner in naming ledger")
     fields = unique_rows(document.get("field", []), "field")
     methods = unique_rows(document.get("method", []), "method")
 
     configured = set(document.get("baseline_classes", []))
-    if configured != set(classes):
-        raise SymbolError("baseline_classes and [[class]] owners differ")
     if not configured or not configured.issubset(original):
         raise SymbolError("ledger baseline class closure is empty or absent from bytecode")
+    if not set(classes).issubset(configured):
+        raise SymbolError("[[class]] row names an owner outside baseline_classes")
 
     all_fields = sum(len(original[name].fields) for name in configured)
     all_methods = sum(len(original[name].methods) for name in configured)
@@ -176,7 +193,7 @@ def validate(document: dict) -> str:
     return (
         f"symbols OK: {len(fields)}/{all_fields} fields and "
         f"{len(methods)}/{all_methods} methods semantically named; "
-        f"{complete}/{len(classes)} classes have exact member closure"
+        f"{complete}/{len(configured)} classes have exact member closure"
     )
 
 

@@ -22,7 +22,8 @@
 //! only lines inside `[keymap]` are read and every other section is ignored, so
 //! the entire `game.toml` can be handed in as-is.
 
-use crate::nokia::{self, Action};
+use crate::keymap::KeyBinding;
+use crate::nokia::Action;
 use crate::preset::{key_from_name, Preset};
 use core::fmt;
 use winit::keyboard::KeyCode;
@@ -34,7 +35,7 @@ pub struct KeymapConfig {
     /// The `preset = "..."` selection, if the table set one.
     pub preset: Option<Preset>,
     /// `(physical key, binding)` overrides; `None` clears the preset binding.
-    pub bindings: Vec<(KeyCode, Option<i32>)>,
+    pub bindings: Vec<(KeyCode, Option<KeyBinding>)>,
 }
 
 /// A problem found while parsing a keymap config, with the 1-based line number.
@@ -105,31 +106,22 @@ pub fn parse(config: &str) -> Result<KeymapConfig, ConfigError> {
 /// Resolve the right-hand side of a `key = value` line to a binding:
 /// an action name or a Nokia code -> `Some(code)`; `none`/`unbind`/`off` ->
 /// `None` (explicit unbind).
-fn parse_binding(rhs: &str, line_no: usize) -> Result<Option<i32>, ConfigError> {
+fn parse_binding(rhs: &str, line_no: usize) -> Result<Option<KeyBinding>, ConfigError> {
     let value = unquote(rhs);
     let folded = value.trim().to_ascii_lowercase();
     if matches!(folded.as_str(), "none" | "unbind" | "off" | "unmapped") {
         return Ok(None);
     }
 
-    // A raw integer Nokia code, validated against the device vocabulary (R10).
+    // Raw device codes are an explicit escape hatch for a reviewed phone
+    // profile. Named bindings remain portable across profiles.
     if let Ok(code) = value.trim().parse::<i32>() {
-        return if nokia::is_vocabulary(code) {
-            Ok(Some(code))
-        } else {
-            Err(ConfigError {
-                line: line_no,
-                message: format!(
-                    "code {code} is not in the Nokia key vocabulary \
-                     (-1..=-7, 48..=57, 42, 35); use `none` to unbind"
-                ),
-            })
-        };
+        return Ok(Some(KeyBinding::Raw(code)));
     }
 
     // Otherwise a named action.
     match Action::from_name(value) {
-        Some(action) => Ok(Some(action.nokia_code())),
+        Some(action) => Ok(Some(KeyBinding::Handset(action.handset_key()))),
         None => Err(ConfigError {
             line: line_no,
             message: format!("`{value}` is not an action name, a Nokia code, or `none`"),
@@ -205,7 +197,13 @@ mod tests {
     fn headerless_document_is_all_keymap() {
         let cfg = parse("preset = \"standard\"\nKeyH = SoftLeft\n").unwrap();
         assert_eq!(cfg.preset, Some(Preset::Standard));
-        assert_eq!(cfg.bindings, vec![(K::KeyH, Some(nokia::SOFT_LEFT))]);
+        assert_eq!(
+            cfg.bindings,
+            vec![(
+                K::KeyH,
+                Some(KeyBinding::Handset(j2me_device::HandsetKey::SoftLeft))
+            )]
+        );
     }
 
     #[test]
@@ -225,7 +223,7 @@ KeyZ = 999       # ignored: not in [keymap]
 ";
         let cfg = parse(text).unwrap();
         assert_eq!(cfg.preset, Some(Preset::Mobile));
-        assert_eq!(cfg.bindings, vec![(K::KeyJ, Some(nokia::FIRE))]);
+        assert_eq!(cfg.bindings, vec![(K::KeyJ, Some(KeyBinding::Raw(-5)))]);
     }
 
     #[test]
@@ -233,15 +231,20 @@ KeyZ = 999       # ignored: not in [keymap]
         let cfg = parse("[keymap]\nKeyQ = \"none\"\nComma = \"#\"\n").unwrap();
         assert_eq!(
             cfg.bindings,
-            vec![(K::KeyQ, None), (K::Comma, Some(nokia::POUND))]
+            vec![
+                (K::KeyQ, None),
+                (
+                    K::Comma,
+                    Some(KeyBinding::Handset(j2me_device::HandsetKey::Pound))
+                )
+            ]
         );
     }
 
     #[test]
-    fn out_of_vocabulary_code_is_a_config_error() {
-        let err = parse("[keymap]\nKeyH = 999\n").unwrap_err();
-        assert_eq!(err.line, 2);
-        assert!(err.message.contains("vocabulary"));
+    fn raw_device_code_is_preserved_for_reviewed_profiles() {
+        let cfg = parse("[keymap]\nKeyH = 999\n").unwrap();
+        assert_eq!(cfg.bindings, vec![(K::KeyH, Some(KeyBinding::Raw(999)))]);
     }
 
     #[test]

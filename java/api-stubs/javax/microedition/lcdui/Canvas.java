@@ -33,12 +33,32 @@ public abstract class Canvas extends Displayable {
 
     protected void keyRepeated(int keyCode) {}
 
+    protected void pointerPressed(int x, int y) {}
+
+    protected void pointerDragged(int x, int y) {}
+
+    protected void pointerReleased(int x, int y) {}
+
+    protected void sizeChanged(int width, int height) {}
+
     protected void hideNotify() {}
 
     protected void showNotify() {}
 
     public int getGameAction(int keyCode) {
         return 0;
+    }
+
+    public boolean hasPointerEvents() {
+        return false;
+    }
+
+    public boolean hasPointerMotionEvents() {
+        return false;
+    }
+
+    public boolean hasRepeatEvents() {
+        return false;
     }
 
     public int getWidth() {

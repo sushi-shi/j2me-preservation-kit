@@ -65,6 +65,8 @@ public class Graphics {
 
     public void fillRoundRect(int x, int y, int width, int height, int arcWidth, int arcHeight) {}
 
+    public void fillTriangle(int x1, int y1, int x2, int y2, int x3, int y3) {}
+
     public void drawArc(int x, int y, int width, int height, int startAngle, int arcAngle) {}
 
     public void fillArc(int x, int y, int width, int height, int startAngle, int arcAngle) {}
@@ -78,4 +80,15 @@ public class Graphics {
     public void drawChars(char[] data, int offset, int length, int x, int y, int anchor) {}
 
     public void drawImage(Image image, int x, int y, int anchor) {}
+
+    public void drawRegion(
+            Image source,
+            int sourceX,
+            int sourceY,
+            int width,
+            int height,
+            int transform,
+            int destinationX,
+            int destinationY,
+            int anchor) {}
 }

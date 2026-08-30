@@ -26,6 +26,13 @@ literal copied binaries. See the j2me home's `PLAYBOOK.md` for the method.
   (R12). Transliteration is not constrained to `no_std`.
 - `crates/` holds the shipped engine libraries (2D or 3D per `game.toml`'s
   `fork`); `apps/` the frontends; `web/` page composition only.
+- `j2me-me` owns only Java ME semantics and host operations. `j2me-device`
+  defines independently composable phone behavior; concrete profiles stay
+  game-owned, while vendor implementations are explicitly named crates.
+- `j2me-media` owns portable format parsing, decoding, synthesis, and resampling.
+  `j2me-platform` owns JAR/JAD, RMS/path, pixel projection, and focus-policy
+  helpers. CPAL/winit and Web APIs live only in `j2me-platform-native` and
+  `j2me-platform-web` respectively.
 - Repository-owned ignored directories begin with `_`; `.gitignore` matches them
   by name (no trailing-slash globs) so symlinks are covered too (R2).
 - `_originals` must be a **real directory, never a symlink** (R2).
@@ -35,11 +42,11 @@ literal copied binaries. See the j2me home's `PLAYBOOK.md` for the method.
 ```text
 _originals/            immutable surviving jars/zips (git-ignored, sha256-verified)
 _reference/            generated catalogs & fingerprints (git-ignored, regenerable)
-java/reconstruction/   builds.toml (provenance), symbols.toml, variants — ledgers
+java/reconstruction/   builds.toml, symbols.toml, admission plans, variants — ledgers
 transliteration/       per-game game-xlat executable spec and adapters
 crates/                canonical portable j2me-* sources (kit repo only)
 apps/                  native desktop host, play/site exporters, web frontend
 tools/                 originals/, AST walkers/crosswalk, line oracle, workflows
 docs/                  REPOSITORY_STRUCTURE, GATES, FORMATS, STATUS (+ more)
-game.toml, Justfile, flake.nix, Cargo.toml
+game.toml, device-profiles.toml, Justfile, flake.nix, Cargo.toml
 ```

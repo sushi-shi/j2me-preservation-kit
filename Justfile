@@ -24,6 +24,12 @@ originals-verify-canfail:
 codec-no-std:
     cargo check -p j2me-codec --no-default-features
 
+# Compile and lint the cfg-gated WebAudio implementation, which the native
+# workspace target cannot see.
+web-check:
+    cargo check -p j2me-platform-web --target wasm32-unknown-unknown
+    cargo clippy -p j2me-platform-web --target wasm32-unknown-unknown -- -D warnings
+
 # Prove the reusable line oracle detects one injected observation mismatch.
 oracle-harness-canfail:
     python3 -m unittest tools.tests.test_line_oracle.LineOracleTests.test_two_independent_processes_match_and_self_test_bites
@@ -71,6 +77,65 @@ crosswalk-fixture-canfail:
 crosswalk-scoper-test:
     python3 -m unittest tools.tests.test_crosswalk_scoper
 
+# Whole-port denominators around the per-node crosswalk. These become live once
+# a game owns a completeness manifest; the reusable negative controls run now.
+port-completeness manifest:
+    python3 tools/port/validate_completeness.py {{quote(manifest)}}
+
+native-reachability manifest:
+    python3 tools/port/native_reachability.py {{quote(manifest)}}
+
+variants-check manifest:
+    python3 tools/port/validate_variants.py {{quote(manifest)}}
+
+# One declarative plan replaces per-class Python wrappers and Just recipes.
+# Scaffolding is add-only: reviewed manifests are never overwritten.
+admission-scaffold plan:
+    python3 tools/port/scaffold_admission.py {{quote(plan)}}
+
+admission-inventory plan:
+    python3 tools/ast/run_live_crosswalk.py {{quote(plan)}} --inventory
+
+admission-crosswalk plan:
+    python3 tools/ast/run_live_crosswalk.py {{quote(plan)}}
+
+admission-crosswalk-canfail plan:
+    python3 tools/ast/run_live_crosswalk.py {{quote(plan)}} --self-test
+
+admission-check plan:
+    python3 tools/port/run_admissions.py {{quote(plan)}}
+
+admissions-check:
+    python3 tools/port/run_admissions.py
+
+port-gates-canfail:
+    python3 tools/port/validate_completeness.py --self-test
+    python3 tools/port/native_reachability.py --self-test
+    python3 tools/port/validate_variants.py --self-test
+    python3 -m unittest tools.tests.test_port_gates
+
+# Keep portable MIDP semantics, host core, and native/browser adapters pointed
+# in one direction. The negative control proves a reverse edge is rejected.
+architecture-check:
+    python3 tools/architecture/validate_layers.py
+
+architecture-canfail:
+    python3 tools/architecture/validate_layers.py --self-test
+
+device-profiles-check:
+    python3 tools/device/validate_profiles.py
+
+device-profiles-canfail:
+    python3 tools/device/validate_profiles.py --self-test
+
+# Conservative original-bytecode review queue for device-sensitive calls and
+# same-method constants. It never auto-selects a handset/profile.
+device-evidence:
+    python3 tools/device/audit_evidence.py
+
+device-evidence-canfail:
+    python3 tools/device/audit_evidence.py --self-test
+
 # Regenerate builds.toml provenance from a resources dir (mechanical facts only;
 # the judgment calls stay flagged for Phase 1 — see the file header).
 gen-builds resources match:
@@ -79,6 +144,31 @@ gen-builds resources match:
         --slug "$(python3 -c 'import tomllib;print(tomllib.load(open("game.toml","rb"))["slug"])')" \
         --title "$(python3 -c 'import tomllib;print(tomllib.load(open("game.toml","rb"))["title"])')" \
         --out java/reconstruction/builds.toml
+
+# --- Runtime landmines (advisory; the second completion axis) -----------------
+# Flag the recurring runtime-crash class the per-node crosswalk cannot see: an
+# array indexed by a signed value that can be -1 (or 0xFFFF-as-i16) cast to
+# usize -> usize::MAX -> out-of-bounds panic, left behind by a recorded collapse.
+# Advisory: reports only, kept OUT of the hard `check` fail-path.
+
+# Scan the transliteration crate for signed-index landmines not provably >= 0.
+# Ratchet: a site is silenced only by an `// index-safe:` annotation or an entry
+# in tools/index-safety/allowlist.toml; the tool prints the UN-silenced count.
+index-safety:
+    python3 tools/index-safety/index_safety.py
+
+# Prove the scanner flags a seeded `def_e[i as usize]` landmine and that a guard,
+# an annotation, and an allowlist entry each silence it (playbook R3, advisory).
+index-safety-canfail:
+    python3 tools/index-safety/index_safety.py --self-test
+
+# The recorded runtime-collapse ledger: no-op/unported collapses grouped by
+# D##/G## finding, OPEN vs retired — the backlog of stale-sentinel landmines.
+collapse-ledger:
+    python3 tools/index-safety/collapse_ledger.py
+
+collapse-ledger-canfail:
+    python3 tools/index-safety/collapse_ledger.py --self-test
 
 # --- Test batteries ----------------------------------------------------------
 
@@ -106,11 +196,19 @@ check:
     just originals-verify
     just originals-verify-canfail
     just codec-no-std
+    just web-check
     just oracle-harness-canfail
     just crosswalk-check
     just crosswalk-canfail
     just crosswalk-fixture-canfail
     just crosswalk-scoper-test
+    just port-gates-canfail
+    just admissions-check
+    just architecture-check
+    just architecture-canfail
+    just device-profiles-check
+    just device-profiles-canfail
+    just device-evidence-canfail
     if [ -d tools/tests ]; then python3 -m unittest discover -s tools/tests; fi
     if [ -f Cargo.toml ]; then cargo fmt --all --check; fi
     if [ -f Cargo.toml ]; then cargo clippy --workspace --all-targets -- -D warnings; fi

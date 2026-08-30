@@ -1,0 +1,19 @@
+[package]
+name = "j2me-platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Host adapters for resource-free Java ME game ports"
+readme = "README.md"
+keywords = ["j2me", "midp", "java-me", "rms", "classpath"]
+categories = ["game-development", "emulators", "filesystem"]
+
+[dependencies]
+j2me-device = { path = "../j2me-device", version = "0.1.0" }
+j2me-me = { path = "../j2me-me", version = "0.1.0" }
+j2me-media = { path = "../j2me-media", version = "0.1.0" }
+toml = { workspace = true }
+zip = { workspace = true }

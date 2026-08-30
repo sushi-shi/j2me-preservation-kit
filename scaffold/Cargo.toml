@@ -16,6 +16,15 @@ rust-version = "1.75"
 # public revision; it never receives a copied `crates/j2me-*` source tree.
 j2me-jvm = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
 j2me-me = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
+# Add these to individual app/crate manifests as their host surface lands. They
+# share the exact same immutable kit revision and are not copied into games.
+j2me-device = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
+j2me-device-nokia = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
+j2me-media = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
+j2me-input = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
+j2me-platform = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
+j2me-platform-native = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
+j2me-platform-web = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
 quote = "1"
 syn = { version = "2", features = ["full", "visit"] }
 

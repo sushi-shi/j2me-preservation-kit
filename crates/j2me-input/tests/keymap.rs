@@ -68,5 +68,7 @@ fn an_unmapped_key_yields_none() {
 #[test]
 fn an_invalid_config_is_rejected() {
     assert!(Keymap::from_config_str("[keymap]\nWobble = Fire\n").is_err());
-    assert!(Keymap::from_config_str("[keymap]\nKeyH = 12345\n").is_err());
+    // Raw integers are deliberately preserved: a non-Nokia device profile may
+    // use codes outside the compatibility vocabulary.
+    assert!(Keymap::from_config_str("[keymap]\nKeyH = 12345\n").is_ok());
 }

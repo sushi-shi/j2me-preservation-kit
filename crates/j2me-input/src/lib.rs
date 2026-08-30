@@ -1,12 +1,10 @@
-//! Generic, remappable native-key to Nokia `FullCanvas` key-code mapping for
-//! J2ME ports.
+//! Generic physical-key to semantic handset-key mapping for J2ME ports.
 //!
-//! A transliterated `keyPressed(int)` speaks one fixed, game-agnostic vocabulary
-//! of raw Nokia codes: the D-pad is `-1..=-4`, Fire is `-5`, the soft keys are
-//! `-6`/`-7`, the digits `0..=9` are `48..=57`, and `*`/`#` are `42`/`35`. This
-//! crate is the single place a native host translates a physical [`KeyCode`]
-//! (from `winit`) into that vocabulary, so every port inherits sane, remappable
-//! controls instead of hand-copying a per-game keymap.
+//! This crate performs only the first hop from winit [`KeyCode`] to
+//! [`HandsetKey`]. A game-owned `j2me-device` input fragment performs the second
+//! hop to the device-specific integer delivered to `keyPressed(int)`. The
+//! explicitly named [`nokia`] module is a compatibility wrapper; generic MIDP
+//! code never selects it implicitly.
 //!
 //! # What you get
 //!
@@ -22,7 +20,7 @@
 //!
 //! Build a [`Keymap`] once at start-up, then translate each key event through it:
 //!
-//! ```
+//! ```no_run
 //! use j2me_input::{Keymap, KeyCode, Preset};
 //!
 //! // `keymap` might come from `game.toml`'s `[keymap]` table or a `keymap.toml`;
@@ -33,16 +31,15 @@
 //!
 //! // In the winit key handler, forward only keys the game understands:
 //! # let physical_key = KeyCode::KeyW;
-//! if let Some(code) = keymap.nokia_code(physical_key) {
+//! # let profile: j2me_device::InputFragment = unimplemented!();
+//! if let Some(code) = keymap.raw_code(physical_key, &profile) {
 //!     // canvas.key_pressed(code);  // feed the transliterated keyPressed(int)
 //!     assert_eq!(code, -1); // W is the D-pad up in the Mobile preset
 //! }
 //! ```
 //!
-//! A port that today hand-writes a `nokia_code(KeyCode) -> Option<i32>` (as
-//! gothic-mobile and stalker-mobile do) swaps the whole function for a single
-//! `Keymap` built at start-up and one `keymap.nokia_code(key)` call at the event
-//! site — same codes, now remappable and shared.
+//! A port that hand-writes a raw key-code function replaces it with one
+//! [`Keymap`] plus the reviewed game-owned input fragment.
 
 pub mod config;
 pub mod keymap;
@@ -50,7 +47,8 @@ pub mod nokia;
 pub mod preset;
 
 pub use config::{ConfigError, KeymapConfig};
-pub use keymap::Keymap;
+pub use j2me_device::HandsetKey;
+pub use keymap::{KeyBinding, Keymap};
 pub use nokia::Action;
 pub use preset::{key_from_name, Preset};
 

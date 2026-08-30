@@ -35,6 +35,7 @@ multiple `collected_as` + `containers` entries (meaningful aliases, kept).
 | `class_count` | mechanical | number of `.class` entries |
 | `midlet_name` / `midlet_version` / `vendor` / `cldc` | mechanical | from `MANIFEST.MF` (strings, may lie about language) |
 | `resolution` / `device` | mechanical | derived from the filename (a hint; confirm from canvas dims) |
+| `device_profile` | **TODO Phase 1** | id in game-owned `device-profiles.toml`; records the independently composed display/input/media/haptics/RMS/Connector/system/font/lifecycle behavior used for this build |
 | `declared_language` | **HINT** | from the filename/manifest — **verify from decoded content, never trust it** (R10) |
 | `official` | **TODO** | `true` = official recovery target; set `false` and move to `[[archived]]` if a fan repack |
 | `repack_tag` | mechanical | a detected fan-repack signature (`by X`, a modder domain) — a hint to archive |
@@ -66,3 +67,5 @@ checks these too.
   aliases** (same payload under two names) and document them.
 - Assign a semantic field (`official`, `lineage`, true language, `baseline`) only
   when bytecode / decoded content / cross-build evidence supports it.
+- Every JAR row must select a reviewed `device_profile`; filename-derived
+  `device` is only a hint and never silently chooses a vendor implementation.

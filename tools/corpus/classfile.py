@@ -92,6 +92,11 @@ class MethodSymbol:
     opcode_sha256: str | None = None
     shape_sha256: str | None = None
     calls: list[str] = field(default_factory=list)  # library/adapter+game callees
+    # Constants actually loaded by this method, not every value merely present
+    # in the enclosing constant pool. Device-evidence tooling uses these as
+    # conservative call-scope candidates; it never claims stack/dataflow proof.
+    loaded_constants: list[Any] = field(default_factory=list)
+    numeric_immediates: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -336,6 +341,8 @@ def analyze_code(code: bytes, pool: ConstantPool, method: MethodSymbol) -> None:
     opcode_bytes = bytearray()
     shape: list[str] = []
     calls: set[str] = set()
+    loaded_constants: list[Any] = []
+    numeric_immediates: list[int] = []
     count = 0
 
     for _, opcode, operand in instructions(code):
@@ -353,9 +360,21 @@ def analyze_code(code: bytes, pool: ConstantPool, method: MethodSymbol) -> None:
             if entry[0] in {"Methodref", "InterfaceMethodref"}:
                 _, owner, name, descriptor = pool.member(cp_index)
                 calls.add(f"{owner}.{name}:{descriptor}")
+            elif opcode in {18, 19, 20} and entry[0] in {
+                "String",
+                "Integer",
+                "Float",
+                "Long",
+                "Double",
+            }:
+                literal = pool.literal(cp_index)
+                if literal not in loaded_constants:
+                    loaded_constants.append(literal)
         immediate = signed_immediate(opcode, operand)
         if immediate is not None:
             token += f":{immediate}"
+            if immediate not in numeric_immediates:
+                numeric_immediates.append(immediate)
         shape.append(token)
 
     method.code_size = len(code)
@@ -364,6 +383,8 @@ def analyze_code(code: bytes, pool: ConstantPool, method: MethodSymbol) -> None:
     method.opcode_sha256 = sha256(bytes(opcode_bytes))
     method.shape_sha256 = sha256("\n".join(shape))
     method.calls = sorted(calls)
+    method.loaded_constants = loaded_constants
+    method.numeric_immediates = numeric_immediates
 
 
 def parse_code_attribute(data: bytes, pool: ConstantPool, method: MethodSymbol) -> None:

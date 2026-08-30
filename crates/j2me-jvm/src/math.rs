@@ -16,7 +16,7 @@
 //!   ([`fsqrt`]); computing the root in `f32` throughout can differ in the last
 //!   bit.
 //!
-//! Seeded from stalker's `stalker-jvm::math` so every port shares one copy
+//! Shared here so every port uses one reviewed implementation
 //! instead of re-deriving these edges. The names match the JVM conversion
 //! mnemonics (`i2f`, `f2i`, `f2l`, `d2f`) and the `Math` method (`imax`, `imin`,
 //! `iabs`) they stand in for.

@@ -1,0 +1,15 @@
+[package]
+name = "j2me-device-nokia"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Opt-in Nokia handset key-code and game-action behavior"
+readme = "README.md"
+keywords = ["j2me", "nokia", "device", "keycodes", "s60"]
+categories = ["game-development", "emulators"]
+
+[dependencies]
+j2me-device = { path = "../j2me-device", version = "0.1.0" }

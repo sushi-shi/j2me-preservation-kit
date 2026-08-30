@@ -34,6 +34,7 @@ description = "Reusable oracle or exhaustive AST ownership tooling changed."
 inputs = [
   "tools/oracle",
   "tools/ast",
+  "tools/port",
   "tools/tests",
 ]
 commands = [
@@ -42,6 +43,69 @@ commands = [
   ["just", "crosswalk-canfail"],
   ["just", "crosswalk-fixture-canfail"],
   ["just", "crosswalk-scoper-test"],
+  ["just", "port-gates-canfail"],
+]
+
+[[gate]]
+name = "device-profiles"
+description = "Handset fragments or per-build profile assignments changed."
+inputs = [
+  "device-profiles.toml",
+  "java/reconstruction/builds.toml",
+  "tools/device/validate_profiles.py",
+  "tools/tests/test_device_profiles.py",
+]
+commands = [
+  ["just", "device-profiles-check"],
+  ["just", "device-profiles-canfail"],
+]
+
+[[gate]]
+name = "device-evidence-tooling"
+description = "The conservative bytecode-to-device review queue changed."
+inputs = [
+  "tools/corpus/classfile.py",
+  "tools/corpus/corpus.py",
+  "tools/device/audit_evidence.py",
+  "tools/tests/test_device_evidence.py",
+]
+commands = [
+  ["just", "device-evidence-canfail"],
+  ["python3", "-m", "unittest", "tools.tests.test_device_evidence"],
+]
+
+[[gate]]
+name = "admissions"
+description = "A declarative per-class Java/Rust admission or its evidence changed."
+inputs = [
+  "_originals",
+  "game.toml",
+  "java/reconstruction/admissions/**/*.toml",
+  "java/reconstruction/symbols.toml",
+  "java/reconstruction/variants/**/*.toml",
+  "java/src/**/*.java",
+  "java/oracle/**/*.java",
+  "transliteration/audits/**/*.toml",
+  "transliteration/game-xlat/src/**/*.rs",
+  "tools/oracle/**/*.py",
+]
+commands = [
+  ["just", "admissions-check"],
+]
+
+[[gate]]
+name = "architecture"
+description = "Reusable crate boundaries or host-adapter dependencies changed."
+inputs = [
+  "Cargo.toml",
+  "crates/**/Cargo.toml",
+  "crates/**/src/**/*.rs",
+  "tools/architecture/**/*.py",
+  "tools/tests/test_architecture.py",
+]
+commands = [
+  ["just", "architecture-check"],
+  ["just", "architecture-canfail"],
 ]
 
 [[gate]]
@@ -58,5 +122,7 @@ inputs = [
 commands = [
   ["cargo", "fmt", "--all", "--check"],
   ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"],
+  ["cargo", "check", "-p", "j2me-platform-web", "--target", "wasm32-unknown-unknown"],
+  ["cargo", "clippy", "-p", "j2me-platform-web", "--target", "wasm32-unknown-unknown", "--", "-D", "warnings"],
   ["cargo", "test", "--workspace"],
 ]

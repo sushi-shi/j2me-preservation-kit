@@ -9,33 +9,12 @@
 //! set is rejected by the device event queue (R10), so a caller treats an
 //! out-of-vocabulary code the same as an unmapped key.
 
-/// D-pad up (`FullCanvas` `UP`).
-pub const UP: i32 = -1;
-/// D-pad down.
-pub const DOWN: i32 = -2;
-/// D-pad left.
-pub const LEFT: i32 = -3;
-/// D-pad right.
-pub const RIGHT: i32 = -4;
-/// Fire / centre-select.
-pub const FIRE: i32 = -5;
-/// Left soft key (`softkey1`).
-pub const SOFT_LEFT: i32 = -6;
-/// Right soft key (`softkey2`).
-pub const SOFT_RIGHT: i32 = -7;
-/// Star `*` key (ASCII `42`).
-pub const STAR: i32 = 42;
-/// Pound `#` key (ASCII `35`).
-pub const POUND: i32 = 35;
+pub use j2me_device_nokia::{DOWN, FIRE, LEFT, POUND, RIGHT, SOFT_LEFT, SOFT_RIGHT, STAR, UP};
 
 /// The Nokia code for decimal digit `n` as its ASCII value (`0` -> `48` ..
 /// `9` -> `57`). Returns `None` for `n > 9`.
 pub const fn digit(n: u8) -> Option<i32> {
-    if n <= 9 {
-        Some(48 + n as i32)
-    } else {
-        None
-    }
+    j2me_device_nokia::digit(n)
 }
 
 /// Is `code` a member of the fixed Nokia key vocabulary the device queue accepts?
@@ -44,10 +23,14 @@ pub const fn digit(n: u8) -> Option<i32> {
 /// keys (`48..=57`), and the two symbol keys `*` (`42`) and `#` (`35`). Used to
 /// reject a bogus numeric override before it ever reaches the (R10) queue.
 pub const fn is_vocabulary(code: i32) -> bool {
-    matches!(
-        code,
-        UP | DOWN | LEFT | RIGHT | FIRE | SOFT_LEFT | SOFT_RIGHT | STAR | POUND
-    ) || (48 <= code && code <= 57)
+    j2me_device_nokia::is_key_code(code)
+}
+
+/// Compatibility projection from the semantic handset vocabulary to Nokia's
+/// raw `FullCanvas` integers. New hosts should use the selected device
+/// profile's [`j2me_device::InputFragment::key_code`] instead.
+pub const fn code(key: j2me_device::HandsetKey) -> Option<i32> {
+    j2me_device_nokia::key_code(key)
 }
 
 /// A human-readable name for a Nokia key, so a `[keymap]` table can bind a key to
@@ -77,20 +60,29 @@ pub enum Action {
 }
 
 impl Action {
+    /// The device-independent handset key represented by this config name.
+    pub const fn handset_key(self) -> j2me_device::HandsetKey {
+        use j2me_device::HandsetKey;
+        match self {
+            Action::Up => HandsetKey::Up,
+            Action::Down => HandsetKey::Down,
+            Action::Left => HandsetKey::Left,
+            Action::Right => HandsetKey::Right,
+            Action::Fire => HandsetKey::Fire,
+            Action::SoftLeft => HandsetKey::SoftLeft,
+            Action::SoftRight => HandsetKey::SoftRight,
+            Action::Digit(n) => HandsetKey::Digit(n),
+            Action::Star => HandsetKey::Star,
+            Action::Pound => HandsetKey::Pound,
+        }
+    }
+
     /// The raw Nokia code this action delivers.
     pub const fn nokia_code(self) -> i32 {
-        match self {
-            Action::Up => UP,
-            Action::Down => DOWN,
-            Action::Left => LEFT,
-            Action::Right => RIGHT,
-            Action::Fire => FIRE,
-            Action::SoftLeft => SOFT_LEFT,
-            Action::SoftRight => SOFT_RIGHT,
-            // `from_name` is the only constructor and it constrains `n <= 9`.
-            Action::Digit(n) => 48 + (n as i32),
-            Action::Star => STAR,
-            Action::Pound => POUND,
+        // `Action::Digit` is constructed by the parser with n <= 9.
+        match code(self.handset_key()) {
+            Some(value) => value,
+            None => unreachable!(),
         }
     }
 

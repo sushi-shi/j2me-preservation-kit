@@ -14,8 +14,8 @@
 //! | `]` / `\`                              | pound `#`      | 35      |
 //!
 //! [`Preset::Mobile`] adds a left-hand cluster on top of every binding above
-//! (mirroring gothic-mobile's and stalker-mobile's keymaps so the ports feel the
-//! same): W/A/S/D move, Q/E are the soft keys, X fires/confirms, and R/F reach
+//! (mirroring the established preservation-port keymaps): W/A/S/D move, Q/E
+//! are the soft keys, X fires/confirms, and R/F reach
 //! the phone's `*`/`#`. It is a strict superset — every Standard binding still
 //! works — so it is the library default.
 //!
@@ -28,6 +28,7 @@
 //! | F             | pound `#`    | 35   |
 
 use crate::nokia;
+use j2me_device::HandsetKey;
 use winit::keyboard::KeyCode;
 
 /// A built-in set of default bindings.
@@ -43,13 +44,18 @@ pub enum Preset {
 }
 
 impl Preset {
-    /// The raw Nokia code this preset assigns to `key`, or `None` if the preset
-    /// leaves the key unbound.
-    pub fn nokia_code(self, key: KeyCode) -> Option<i32> {
+    /// The device-independent handset key assigned to `key`.
+    pub fn handset_key(self, key: KeyCode) -> Option<HandsetKey> {
         match self {
             Preset::Standard => standard(key),
             Preset::Mobile => mobile_cluster(key).or_else(|| standard(key)),
         }
+    }
+
+    /// The raw Nokia code this preset assigns to `key`, or `None` if the preset
+    /// leaves the key unbound.
+    pub fn nokia_code(self, key: KeyCode) -> Option<i32> {
+        nokia::code(self.handset_key(key)?)
     }
 
     /// Parse a preset name (case-insensitive): `standard`/`default`/`desktop`/
@@ -65,51 +71,51 @@ impl Preset {
 }
 
 /// The arrows/Enter/F-key/digit/bracket base shared by both presets.
-fn standard(key: KeyCode) -> Option<i32> {
+fn standard(key: KeyCode) -> Option<HandsetKey> {
     use KeyCode as K;
     Some(match key {
-        K::ArrowUp => nokia::UP,
-        K::ArrowDown => nokia::DOWN,
-        K::ArrowLeft => nokia::LEFT,
-        K::ArrowRight => nokia::RIGHT,
+        K::ArrowUp => HandsetKey::Up,
+        K::ArrowDown => HandsetKey::Down,
+        K::ArrowLeft => HandsetKey::Left,
+        K::ArrowRight => HandsetKey::Right,
 
-        K::Enter | K::NumpadEnter | K::Space | K::Numpad5 => nokia::FIRE,
+        K::Enter | K::NumpadEnter | K::Space | K::Numpad5 => HandsetKey::Fire,
 
-        K::F1 => nokia::SOFT_LEFT,
-        K::F2 => nokia::SOFT_RIGHT,
+        K::F1 => HandsetKey::SoftLeft,
+        K::F2 => HandsetKey::SoftRight,
 
-        K::Digit0 | K::Numpad0 => 48,
-        K::Digit1 | K::Numpad1 => 49,
-        K::Digit2 | K::Numpad2 => 50,
-        K::Digit3 | K::Numpad3 => 51,
-        K::Digit4 | K::Numpad4 => 52,
+        K::Digit0 | K::Numpad0 => HandsetKey::Digit(0),
+        K::Digit1 | K::Numpad1 => HandsetKey::Digit(1),
+        K::Digit2 | K::Numpad2 => HandsetKey::Digit(2),
+        K::Digit3 | K::Numpad3 => HandsetKey::Digit(3),
+        K::Digit4 | K::Numpad4 => HandsetKey::Digit(4),
         // Numpad5 is Fire above; the top-row 5 stays a digit.
-        K::Digit5 => 53,
-        K::Digit6 | K::Numpad6 => 54,
-        K::Digit7 | K::Numpad7 => 55,
-        K::Digit8 | K::Numpad8 => 56,
-        K::Digit9 | K::Numpad9 => 57,
+        K::Digit5 => HandsetKey::Digit(5),
+        K::Digit6 | K::Numpad6 => HandsetKey::Digit(6),
+        K::Digit7 | K::Numpad7 => HandsetKey::Digit(7),
+        K::Digit8 | K::Numpad8 => HandsetKey::Digit(8),
+        K::Digit9 | K::Numpad9 => HandsetKey::Digit(9),
 
-        K::NumpadMultiply | K::BracketLeft => nokia::STAR,
-        K::BracketRight | K::Backslash => nokia::POUND,
+        K::NumpadMultiply | K::BracketLeft => HandsetKey::Star,
+        K::BracketRight | K::Backslash => HandsetKey::Pound,
 
         _ => return None,
     })
 }
 
 /// The mobile-only left-hand cluster layered over [`standard`].
-fn mobile_cluster(key: KeyCode) -> Option<i32> {
+fn mobile_cluster(key: KeyCode) -> Option<HandsetKey> {
     use KeyCode as K;
     Some(match key {
-        K::KeyW => nokia::UP,
-        K::KeyS => nokia::DOWN,
-        K::KeyA => nokia::LEFT,
-        K::KeyD => nokia::RIGHT,
-        K::KeyX => nokia::FIRE,
-        K::KeyQ => nokia::SOFT_LEFT,
-        K::KeyE => nokia::SOFT_RIGHT,
-        K::KeyR => nokia::STAR,
-        K::KeyF => nokia::POUND,
+        K::KeyW => HandsetKey::Up,
+        K::KeyS => HandsetKey::Down,
+        K::KeyA => HandsetKey::Left,
+        K::KeyD => HandsetKey::Right,
+        K::KeyX => HandsetKey::Fire,
+        K::KeyQ => HandsetKey::SoftLeft,
+        K::KeyE => HandsetKey::SoftRight,
+        K::KeyR => HandsetKey::Star,
+        K::KeyF => HandsetKey::Pound,
         _ => return None,
     })
 }

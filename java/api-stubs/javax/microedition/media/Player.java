@@ -30,6 +30,8 @@ public interface Player {
 
     long getDuration();
 
+    Control getControl(String controlType);
+
     void addPlayerListener(PlayerListener playerListener);
 
     void removePlayerListener(PlayerListener playerListener);

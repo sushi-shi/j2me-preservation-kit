@@ -11,6 +11,10 @@ public class RecordStore {
     public static void deleteRecordStore(String name)
             throws RecordStoreException, RecordStoreNotFoundException {}
 
+    public static String[] listRecordStores() {
+        return null;
+    }
+
     public void closeRecordStore() throws RecordStoreNotOpenException, RecordStoreException {}
 
     public int getNumRecords() throws RecordStoreNotOpenException {
@@ -18,6 +22,15 @@ public class RecordStore {
     }
 
     public int getSizeAvailable() throws RecordStoreNotOpenException {
+        return 0;
+    }
+
+    public int getNextRecordID() throws RecordStoreNotOpenException, RecordStoreException {
+        return 0;
+    }
+
+    public int getRecordSize(int recordId)
+            throws RecordStoreNotOpenException, RecordStoreException {
         return 0;
     }
 

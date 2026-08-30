@@ -28,24 +28,10 @@ pub const KEY_NUM9: i32 = 57;
 pub const KEY_STAR: i32 = 42;
 pub const KEY_POUND: i32 = 35;
 
-// Negative navigation and soft-key device codes. MIDP does not standardize the
-// concrete integers a handset reports for its navigation cluster or soft keys —
-// they are device policy — but this negative-code assignment is the one Nokia's
-// Series 60 uses and the one every port in this collection has assumed, so it is
-// the shared default the device tables below are written against.
-pub const NAV_UP: i32 = -1;
-pub const NAV_DOWN: i32 = -2;
-pub const NAV_LEFT: i32 = -3;
-pub const NAV_RIGHT: i32 = -4;
-pub const NAV_FIRE: i32 = -5;
-pub const SOFT_LEFT: i32 = -6;
-pub const SOFT_RIGHT: i32 = -7;
-
 /// A device's `Canvas.getGameAction` key-to-action table: it answers the game
 /// action for a raw key code, or `0` for a key with no game action, exactly as
-/// MIDP defines the mapping to be device-supplied. [`midp_default_game_action`]
-/// and [`nokia_game_action`] are the two tables this kit ships; a host may pass
-/// any closure to model another handset.
+/// MIDP defines the mapping to be device-supplied. This portable crate ships no
+/// implicit handset table; a host supplies a closure or reviewed profile.
 pub type DeviceGameActionTable<'a> = &'a dyn Fn(i32) -> i32;
 
 /// `Canvas.getGameAction(int)`.
@@ -61,32 +47,9 @@ pub fn get_game_action(key_code: i32, device_table: DeviceGameActionTable<'_>) -
     device_table(key_code)
 }
 
-/// The MIDP navigation-cluster default: the abstract UP/DOWN/LEFT/RIGHT/FIRE
-/// game actions on the shared negative navigation codes, and nothing else. A
-/// handset that maps only its d-pad (not the keypad) uses this table.
-pub const fn midp_default_game_action(code: i32) -> i32 {
-    match code {
-        NAV_UP => UP,
-        NAV_DOWN => DOWN,
-        NAV_LEFT => LEFT,
-        NAV_RIGHT => RIGHT,
-        NAV_FIRE => FIRE,
-        _ => 0,
-    }
-}
-
-/// Nokia Series 60 (e.g. the N70): the navigation cluster **plus** the ITU
-/// keypad, whose physical layout doubles as a d-pad — 2 up, 8 down, 4 left,
-/// 6 right, 5 fire.
-pub const fn nokia_game_action(code: i32) -> i32 {
-    match code {
-        NAV_UP | KEY_NUM2 => UP,
-        NAV_DOWN | KEY_NUM8 => DOWN,
-        NAV_LEFT | KEY_NUM4 => LEFT,
-        NAV_RIGHT | KEY_NUM6 => RIGHT,
-        NAV_FIRE | KEY_NUM5 => FIRE,
-        _ => 0,
-    }
+/// `Canvas.getGameAction` through a reviewed game-owned handset fragment.
+pub fn get_game_action_profile(code: i32, input: &j2me_device::InputFragment) -> i32 {
+    input.game_action(code)
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -95,6 +58,42 @@ pub enum CanvasEvent {
     KeyPressed(i32),
     KeyReleased(i32),
     KeyRepeated(i32),
+    PointerPressed { x: i32, y: i32 },
+    PointerDragged { x: i32, y: i32 },
+    PointerReleased { x: i32, y: i32 },
+    SizeChanged { width: i32, height: i32 },
+    CommandAction(CommandId),
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct CommandId(pub u32);
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Command {
+    pub id: CommandId,
+    pub label: String,
+    pub command_type: i32,
+    pub priority: i32,
+}
+
+impl Command {
+    pub const SCREEN: i32 = 1;
+    pub const BACK: i32 = 2;
+    pub const CANCEL: i32 = 3;
+    pub const OK: i32 = 4;
+    pub const HELP: i32 = 5;
+    pub const STOP: i32 = 6;
+    pub const EXIT: i32 = 7;
+    pub const ITEM: i32 = 8;
+
+    pub fn new(id: CommandId, label: impl Into<String>, command_type: i32, priority: i32) -> Self {
+        Self {
+            id,
+            label: label.into(),
+            command_type,
+            priority,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -105,6 +104,11 @@ pub struct Canvas {
     full_screen: bool,
     repaint_owed: bool,
     input: VecDeque<CanvasEvent>,
+    commands: Vec<Command>,
+    command_listener: bool,
+    pointer_events: bool,
+    pointer_motion_events: bool,
+    repeat_events: bool,
 }
 
 impl Canvas {
@@ -120,7 +124,35 @@ impl Canvas {
             full_screen: false,
             repaint_owed: false,
             input: VecDeque::new(),
+            commands: Vec::new(),
+            command_listener: false,
+            pointer_events: false,
+            pointer_motion_events: false,
+            repeat_events: false,
         }
+    }
+
+    pub fn for_device(display: &j2me_device::DisplayFragment, fullscreen: bool) -> Self {
+        let (width, height) = display.canvas_size(fullscreen);
+        let mut canvas = Self::new(
+            i32::try_from(width).expect("device-profile width fits Java int"),
+            i32::try_from(height).expect("device-profile height fits Java int"),
+        );
+        canvas.pointer_events = false;
+        canvas.pointer_motion_events = false;
+        canvas.repeat_events = false;
+        canvas
+    }
+
+    /// Construct a canvas with the selected device's display and callback
+    /// capabilities. Keeping these flags in the game-owned profile prevents a
+    /// desktop host from silently pretending every handset was touch-capable.
+    pub fn for_profile(profile: &j2me_device::DeviceProfile, fullscreen: bool) -> Self {
+        let mut canvas = Self::for_device(&profile.display, fullscreen);
+        canvas.pointer_events = profile.input.pointer_events;
+        canvas.pointer_motion_events = profile.input.pointer_motion_events;
+        canvas.repeat_events = profile.input.repeat_events;
+        canvas
     }
 
     pub const fn width(&self) -> i32 {
@@ -137,6 +169,18 @@ impl Canvas {
 
     pub const fn is_full_screen(&self) -> bool {
         self.full_screen
+    }
+
+    pub const fn has_pointer_events(&self) -> bool {
+        self.pointer_events
+    }
+
+    pub const fn has_pointer_motion_events(&self) -> bool {
+        self.pointer_motion_events
+    }
+
+    pub const fn has_repeat_events(&self) -> bool {
+        self.repeat_events
     }
 
     pub fn set_full_screen_mode(&mut self, enabled: bool) {
@@ -161,6 +205,70 @@ impl Canvas {
 
     pub fn key_repeated(&mut self, code: i32) {
         self.input.push_back(CanvasEvent::KeyRepeated(code));
+    }
+
+    pub fn pointer_pressed(&mut self, x: i32, y: i32) {
+        self.input.push_back(CanvasEvent::PointerPressed { x, y });
+    }
+
+    pub fn pointer_dragged(&mut self, x: i32, y: i32) {
+        self.input.push_back(CanvasEvent::PointerDragged { x, y });
+    }
+
+    pub fn pointer_released(&mut self, x: i32, y: i32) {
+        self.input.push_back(CanvasEvent::PointerReleased { x, y });
+    }
+
+    /// Apply a host surface resize before queueing the MIDP `sizeChanged`
+    /// callback. Duplicate dimensions do not invent duplicate callbacks.
+    pub fn resize(&mut self, width: i32, height: i32) -> Result<(), JavaError> {
+        if width <= 0 || height <= 0 {
+            return Err(JavaError::IllegalArgument(
+                "Canvas dimensions must be positive",
+            ));
+        }
+        if self.width != width || self.height != height {
+            self.width = width;
+            self.height = height;
+            self.input
+                .push_back(CanvasEvent::SizeChanged { width, height });
+            self.request_repaint();
+        }
+        Ok(())
+    }
+
+    pub fn add_command(&mut self, command: Command) {
+        if !self
+            .commands
+            .iter()
+            .any(|existing| existing.id == command.id)
+        {
+            self.commands.push(command);
+        }
+    }
+
+    pub fn remove_command(&mut self, id: CommandId) {
+        self.commands.retain(|command| command.id != id);
+    }
+
+    pub fn commands(&self) -> &[Command] {
+        &self.commands
+    }
+
+    pub fn set_command_listener(&mut self, present: bool) {
+        self.command_listener = present;
+    }
+
+    /// Queue a soft-command callback only when the same command object is
+    /// registered and a listener is installed, matching `Displayable` identity
+    /// rather than guessing from its label or priority.
+    pub fn command_action(&mut self, id: CommandId) -> bool {
+        if self.command_listener && self.commands.iter().any(|command| command.id == id) {
+            self.input.push_back(CanvasEvent::CommandAction(id));
+            true
+        } else {
+            false
+        }
     }
 
     pub fn pending_input_len(&self) -> usize {
@@ -190,14 +298,6 @@ impl Canvas {
 
     fn hide_notify(&mut self) {
         self.shown = false;
-    }
-
-    /// Common keypad and d-pad mapping. A convenience alias for the
-    /// [`nokia_game_action`] device table (the single owner of the mapping);
-    /// per-device overrides belong in the game's host adapter and must be
-    /// oracle-backed.
-    pub const fn common_game_action(code: i32) -> i32 {
-        nokia_game_action(code)
     }
 }
 
@@ -237,6 +337,10 @@ impl Display {
             vibration_supported,
             ..Self::default()
         }
+    }
+
+    pub fn for_device(haptics: &j2me_device::HapticsFragment) -> Self {
+        Self::with_vibration_support(haptics.vibration)
     }
 
     pub const fn has_current(&self) -> bool {
@@ -462,63 +566,33 @@ mod behavior_tests {
     use super::*;
 
     #[test]
-    fn game_action_maps_keypad_and_dpad_and_zero_otherwise() {
-        // ITU keypad.
-        assert_eq!(Canvas::common_game_action(KEY_NUM2), UP);
-        assert_eq!(Canvas::common_game_action(KEY_NUM8), DOWN);
-        assert_eq!(Canvas::common_game_action(KEY_NUM4), LEFT);
-        assert_eq!(Canvas::common_game_action(KEY_NUM6), RIGHT);
-        assert_eq!(Canvas::common_game_action(KEY_NUM5), FIRE);
-        // d-pad.
-        assert_eq!(Canvas::common_game_action(-1), UP);
-        assert_eq!(Canvas::common_game_action(-5), FIRE);
-        // A code with no game action returns 0 (e.g. the remapped soft key -8,
-        // and '#', which the game handles by raw code, not by action).
-        assert_eq!(Canvas::common_game_action(-8), 0);
-        assert_eq!(Canvas::common_game_action(KEY_POUND), 0);
-        assert_eq!(Canvas::common_game_action(0), 0);
-    }
+    fn game_action_has_no_implicit_phone_table() {
+        let custom = |code| if code == 710 { GAME_A } else { 0 };
+        assert_eq!(get_game_action(710, &custom), GAME_A);
+        assert_eq!(get_game_action(KEY_NUM2, &custom), 0);
 
-    #[test]
-    fn get_game_action_resolves_through_the_supplied_device_table() {
-        // The ITU keypad doubles as a d-pad under the Nokia table: 2 is up,
-        // 8 down, 4 left, 6 right, 5 fire.
-        assert_eq!(get_game_action(KEY_NUM2, &nokia_game_action), UP);
-        assert_eq!(get_game_action(KEY_NUM8, &nokia_game_action), DOWN);
-        assert_eq!(get_game_action(KEY_NUM4, &nokia_game_action), LEFT);
-        assert_eq!(get_game_action(KEY_NUM6, &nokia_game_action), RIGHT);
-        assert_eq!(get_game_action(KEY_NUM5, &nokia_game_action), FIRE);
-        // The negative navigation cluster maps the same under both tables.
-        assert_eq!(get_game_action(NAV_UP, &nokia_game_action), UP);
-        assert_eq!(get_game_action(NAV_UP, &midp_default_game_action), UP);
-        assert_eq!(get_game_action(NAV_FIRE, &midp_default_game_action), FIRE);
-    }
-
-    #[test]
-    fn the_midp_default_table_maps_only_the_navigation_cluster() {
-        // Unlike the Nokia table, the bare MIDP default does not treat the
-        // numeric keypad as a d-pad.
-        assert_eq!(get_game_action(KEY_NUM2, &midp_default_game_action), 0);
-        assert_eq!(get_game_action(KEY_NUM5, &midp_default_game_action), 0);
-        // Soft keys, '*' and '#' have no game action under either table.
-        for table in [
-            &nokia_game_action as &dyn Fn(i32) -> i32,
-            &midp_default_game_action,
-        ] {
-            assert_eq!(get_game_action(SOFT_LEFT, table), 0);
-            assert_eq!(get_game_action(SOFT_RIGHT, table), 0);
-            assert_eq!(get_game_action(KEY_STAR, table), 0);
-            assert_eq!(get_game_action(KEY_POUND, table), 0);
-        }
-    }
-
-    #[test]
-    fn common_game_action_stays_an_alias_of_the_nokia_table() {
-        for code in [
-            KEY_NUM2, KEY_NUM8, KEY_NUM4, KEY_NUM6, KEY_NUM5, NAV_UP, NAV_FIRE, SOFT_LEFT, 0,
-        ] {
-            assert_eq!(Canvas::common_game_action(code), nokia_game_action(code));
-        }
+        let input = j2me_device::InputFragment {
+            up: 700,
+            down: 701,
+            left: 702,
+            right: 703,
+            fire: 704,
+            soft_left: 705,
+            soft_right: 706,
+            star: 707,
+            pound: 708,
+            digits: [720, 721, 722, 723, 724, 725, 726, 727, 728, 729],
+            game_action_up: vec![700, 722],
+            game_action_down: vec![701, 728],
+            game_action_left: vec![702, 724],
+            game_action_right: vec![703, 726],
+            game_action_fire: vec![704, 725],
+            pointer_events: true,
+            pointer_motion_events: true,
+            repeat_events: true,
+        };
+        assert_eq!(get_game_action_profile(722, &input), UP);
+        assert_eq!(get_game_action_profile(705, &input), 0);
     }
 
     #[test]
@@ -612,5 +686,34 @@ mod behavior_tests {
         assert!(c.is_shown());
         d.clear_current(&mut c);
         assert!(!c.is_shown());
+    }
+
+    #[test]
+    fn pointer_resize_and_command_callbacks_share_the_serial_queue() {
+        let mut c = Canvas::new(128, 160);
+        c.pointer_pressed(7, 11);
+        c.resize(176, 208).unwrap();
+        let left = Command::new(CommandId(1), " ", Command::OK, 1);
+        c.add_command(left);
+        c.set_command_listener(true);
+        assert!(c.command_action(CommandId(1)));
+
+        // resize owes a repaint, so the serialized MIDP paint remains first.
+        assert_eq!(c.poll_event(), Some(CanvasEvent::Paint));
+        assert_eq!(
+            c.poll_event(),
+            Some(CanvasEvent::PointerPressed { x: 7, y: 11 })
+        );
+        assert_eq!(
+            c.poll_event(),
+            Some(CanvasEvent::SizeChanged {
+                width: 176,
+                height: 208
+            })
+        );
+        assert_eq!(
+            c.poll_event(),
+            Some(CanvasEvent::CommandAction(CommandId(1)))
+        );
     }
 }

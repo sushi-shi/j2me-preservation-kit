@@ -6,6 +6,7 @@ from tools.ast.live_crosswalk import (
     BodySpec,
     LiveCrosswalkError,
     RustTarget,
+    inventory_json,
     require_spec_keys,
 )
 
@@ -24,6 +25,17 @@ def spec(key: str) -> BodySpec:
 
 
 class LiveCrosswalkTests(unittest.TestCase):
+    def test_inventory_json_is_deterministic_and_newline_terminated(self) -> None:
+        self.assertEqual(inventory_json({"z": 1, "a": [2]}), '{\n  "a": [\n    2\n  ],\n  "z": 1\n}\n')
+
+    def test_inventory_json_numbers_nodes_without_changing_their_hash(self) -> None:
+        rendered = inventory_json(
+            {"body": [{"java_nodes": ["A", "B"], "rust": [{"nodes": ["C"]}]}]}
+        )
+        self.assertIn('"index": 1', rendered)
+        self.assertIn('"node": "B"', rendered)
+        self.assertIn('"java_node_count": 2', rendered)
+
     def test_requires_exact_ordered_manifest_closure(self) -> None:
         require_spec_keys(
             {"body": [{"java_item": "a"}, {"java_item": "b"}]},
