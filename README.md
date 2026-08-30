@@ -58,9 +58,10 @@ exact revision. Generated games must never carry copied portable crate trees.
 
 The scaffold also carries the reusable byte-level corpus classifier, content
 resource catalog, dual-decompiler driver, numeric-opcode authority, canonical
-Java compiler/packager, and Java ME API stubs. Their game-specific facts live in
-`game.toml [java]`; empty Phase-0 values intentionally keep Phase-2 checks red
-until a baseline and canonical class closure have been reviewed.
+Java compiler/packager, bytecode-bound semantic-symbol ledger validator, and
+Java ME API stubs. Their game-specific facts live in `game.toml [java]` and
+`java/reconstruction/symbols.toml`; empty Phase-0 values intentionally keep
+Phase-2 checks red until a baseline and canonical class closure are reviewed.
 
 ## License
 

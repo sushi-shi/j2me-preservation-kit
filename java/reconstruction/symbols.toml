@@ -1,0 +1,15 @@
+schema_version = 1
+baseline = ""
+baseline_classes = []
+note = "Phase 2 skeleton. Canonical names describe behavior and never claim lost original spelling."
+
+[coverage]
+baseline_fields = 0
+baseline_methods = 0
+named_fields = 0
+named_methods = 0
+complete_classes = 0
+
+# Add one [[class]] row for every baseline game class, then bytecode-bound
+# [[field]] and [[method]] rows. tools/java/validate_symbols.py deliberately
+# rejects this empty skeleton so naming coverage cannot pass vacuously.

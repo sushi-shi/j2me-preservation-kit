@@ -56,6 +56,13 @@ java-build:
 java-build-canfail:
     python3 tools/java/compile_named_java.py --self-test
 
+# Phase 2 semantic naming ledger. The empty scaffold ledger fails by design.
+symbols-check:
+    python3 tools/java/validate_symbols.py
+
+symbols-canfail:
+    python3 tools/java/validate_symbols.py --self-test
+
 # Prove the reusable line oracle detects one injected observation mismatch.
 oracle-harness-canfail:
     python3 -m unittest tools.tests.test_line_oracle.LineOracleTests.test_two_independent_processes_match_and_self_test_bites
