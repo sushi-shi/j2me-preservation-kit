@@ -41,16 +41,25 @@
 //! [`parse`] parses a decimal `int` with the JVM's full Unicode digit table
 //! (`Character.digit` across every script, not just ASCII) and its
 //! signed-overflow limits, so every port shares one copy.
+//!
+//! ## `java.lang.Thread` / `Runnable`
+//!
+//! [`thread`] provides runtime-owned thread identities and a deterministic,
+//! cooperative start queue. Hosts dispatch game-owned Runnable callbacks
+//! explicitly, with exact `Thread.currentThread()` identity and one-shot start
+//! semantics, rather than introducing nondeterministic native threads.
 
 pub mod io;
 pub mod math;
 pub mod parse;
 pub mod random;
+pub mod thread;
 
 pub use io::{ByteArrayInputStream, DataInputStream, DataOutputStream};
 pub use math::{d2f, f2i, f2l, fsqrt, i2f, iabs, imax, imin, ineg};
 pub use parse::{parse_int, parse_int_opt};
 pub use random::Random;
+pub use thread::{HostThreadOp, RunnableId, ThreadId, ThreadRuntime, ThreadState};
 
 use std::cell::Cell;
 use std::fmt;
@@ -65,6 +74,7 @@ pub enum JavaError {
     Arithmetic,
     IllegalArgument(&'static str),
     IllegalState(&'static str),
+    IllegalThreadState,
     ClassCast,
     Io(String),
     ConnectionNotFound(String),
@@ -89,6 +99,7 @@ impl fmt::Display for JavaError {
                 write!(formatter, "IllegalArgumentException: {message}")
             }
             Self::IllegalState(message) => write!(formatter, "IllegalStateException: {message}"),
+            Self::IllegalThreadState => write!(formatter, "IllegalThreadStateException"),
             Self::ClassCast => write!(formatter, "ClassCastException"),
             Self::Io(message) => write!(formatter, "IOException: {message}"),
             Self::ConnectionNotFound(message) => {

@@ -30,6 +30,13 @@ second cursor, so ranged streams, mark/reset, and partial consumption before an
 ordinary `std` runtime layer; only the separate bounded serialization codecs
 are intended to be `no_std`.
 
+Its `java.lang.Thread` layer is cooperative and deterministic: constructing a
+thread allocates identity, `start()` queues that identity exactly once, and the
+host explicitly dispatches the queued Runnable. During dispatch,
+`current_thread()` exposes the same identity that Java's
+`Thread.currentThread()` would return. The runtime never invents native-thread
+timing, so headless tests and web hosts share the same ordering contract.
+
 ## Usage
 
 ```rust
@@ -55,6 +62,23 @@ assert_eq!(input.read_unsigned_short().unwrap(), 0x1234);
 let stream = input.into_inner();
 assert_eq!(stream.position(), 3);
 assert_eq!(stream.available(), 0);
+```
+
+A host can drive Java Runnable work without racing the transliterated game:
+
+```rust
+use j2me_jvm::{RunnableId, ThreadRuntime};
+
+let mut threads = ThreadRuntime::new();
+let thread = threads.new_thread(Some(RunnableId(7)));
+threads.start(thread).unwrap();
+threads
+    .dispatch_next(|threads, running, target| {
+        assert_eq!(threads.current_thread(), Some(running));
+        assert_eq!(target, RunnableId(7));
+        Ok::<_, ()>(())
+    })
+    .unwrap();
 ```
 
 ## License
