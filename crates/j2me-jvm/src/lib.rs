@@ -14,6 +14,15 @@
 //! slice-typed `java_array_*` accessors — for transliterations written directly
 //! against the JVM opcode names. Both are canonical; pick whichever spelling
 //! reads closest to the code being ported.
+//!
+//! ## `java.util.Random`
+//!
+//! [`random`] adds the JVM's 48-bit LCG ([`Random`]) so every port shares one
+//! bit-identical `java.util.Random` instead of duplicating it.
+
+pub mod random;
+
+pub use random::Random;
 
 use std::cell::Cell;
 use std::fmt;
