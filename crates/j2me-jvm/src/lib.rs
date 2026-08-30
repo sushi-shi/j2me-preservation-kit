@@ -219,6 +219,12 @@ pub fn array_2d_mut<T>(
 
 pub trait Clock {
     fn current_time_millis(&self) -> i64;
+
+    /// Advance a deterministic clock by `delta_millis`. Real wall clocks keep
+    /// the default no-op because time already moves independently. Keeping this
+    /// on the trait lets headless hosts step time through `&dyn Clock` without
+    /// exposing or downcasting the concrete clock implementation.
+    fn advance(&self, _delta_millis: i64) {}
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -257,6 +263,10 @@ impl VirtualClock {
 impl Clock for VirtualClock {
     fn current_time_millis(&self) -> i64 {
         self.millis.get()
+    }
+
+    fn advance(&self, delta_millis: i64) {
+        VirtualClock::advance(self, delta_millis);
     }
 }
 
