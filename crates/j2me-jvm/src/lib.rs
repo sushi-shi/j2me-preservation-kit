@@ -34,13 +34,21 @@
 //! distinct from `j2me-codec`'s `no_std` bounded reader: this one is `std`,
 //! returns [`JavaError`]/[`JavaResult`], and mirrors the full Java method
 //! surface.
+//!
+//! ## `java.lang.Integer.parseInt`
+//!
+//! [`parse`] parses a decimal `int` with the JVM's full Unicode digit table
+//! (`Character.digit` across every script, not just ASCII) and its
+//! signed-overflow limits, so every port shares one copy.
 
 pub mod io;
 pub mod math;
+pub mod parse;
 pub mod random;
 
 pub use io::{DataInputStream, DataOutputStream};
 pub use math::{d2f, f2i, f2l, fsqrt, i2f, iabs, imax, imin, ineg};
+pub use parse::{parse_int, parse_int_opt};
 pub use random::Random;
 
 use std::cell::Cell;
