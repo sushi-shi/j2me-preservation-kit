@@ -8,7 +8,9 @@
 //!   `drawImage`/`drawRegion` (with `GraphicsError`/`SpriteTransform`) plus
 //!   `drawArc` / `fillArc` (the MIDP ellipse-sector rasteriser);
 //! - [`canvas`] — the `Canvas`/`Display` serial paint-input queue, the
-//!   [`Displayable`] surface, and host-visible `Display.vibrate` requests;
+//!   [`Displayable`] surface, host-visible `Display.vibrate` requests, and the
+//!   `Canvas.getGameAction` resolver with its MIDP-default and Nokia device
+//!   key-to-action tables;
 //! - [`media`] — the MMAPI player model with `VolumeControl`
 //!   (`getControl`/`setLevel`/`getLevel`), a `PlayerListener` registration, and
 //!   the `getState()` MMAPI integers;
@@ -27,7 +29,10 @@ pub mod image;
 pub mod media;
 pub mod rms;
 
-pub use canvas::{Canvas, CanvasEvent, Display, Displayable, HostDisplayOp};
+pub use canvas::{
+    get_game_action, midp_default_game_action, nokia_game_action, Canvas, CanvasEvent,
+    DeviceGameActionTable, Display, Displayable, HostDisplayOp,
+};
 pub use graphics::{Graphics, GraphicsError, SpriteTransform};
 pub use image::{create_image_named, create_image_region, ImageResources};
 pub use j2me_canvas::{source_over, Argb, Image, ImageError};
