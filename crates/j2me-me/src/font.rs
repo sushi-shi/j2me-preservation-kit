@@ -13,6 +13,21 @@ pub struct FontSpec {
     pub size: i32,
 }
 
+impl FontSpec {
+    /// `Font.getDefaultFont()`: `FACE_SYSTEM`, `STYLE_PLAIN`, `SIZE_MEDIUM`.
+    pub const DEFAULT: Self = Self {
+        face: 0,
+        style: 0,
+        size: 0,
+    };
+}
+
+impl Default for FontSpec {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FontMetrics {
     pub height: i32,
@@ -124,5 +139,18 @@ mod tests {
         };
         assert_eq!(runtime.metrics(spec).unwrap().baseline, 7);
         assert_eq!(runtime.glyph(spec, 'A').unwrap().alpha, vec![255]);
+    }
+
+    #[test]
+    fn default_spec_is_the_exact_midp_default_font() {
+        assert_eq!(
+            FontSpec::DEFAULT,
+            FontSpec {
+                face: 0,
+                style: 0,
+                size: 0,
+            }
+        );
+        assert_eq!(FontSpec::default(), FontSpec::DEFAULT);
     }
 }

@@ -1,9 +1,10 @@
 //! Deterministic MIDP Graphics operations over a neutral ARGB image:
-//! `setColor`/clip/`translate`/`fillRect`/`drawRect`/`drawLine`/`fillTriangle`/
+//! `setColor`/`setFont`/clip/`translate`/`fillRect`/`drawRect`/`drawLine`/`fillTriangle`/
 //! rounded rectangles/`drawImage`/`drawRegion` (with `GraphicsError` and
 //! `SpriteTransform`), the MIDP `drawArc` / `fillArc` ellipse-sector rasteriser, and a public
 //! [`anchor_top_left`] anchor resolver.
 
+use crate::font::FontSpec;
 use j2me_canvas::Image;
 
 pub const HCENTER: i32 = 1;
@@ -112,6 +113,7 @@ impl Rect {
 pub struct Graphics<'a> {
     target: &'a mut Image,
     color: u32,
+    font: FontSpec,
     translate_x: i32,
     translate_y: i32,
     clip: Rect,
@@ -128,6 +130,7 @@ impl<'a> Graphics<'a> {
         Self {
             target,
             color: 0xff00_0000,
+            font: FontSpec::DEFAULT,
             translate_x: 0,
             translate_y: 0,
             clip,
@@ -147,6 +150,19 @@ impl<'a> Graphics<'a> {
 
     pub const fn color(&self) -> i32 {
         (self.color & 0x00ff_ffff) as i32
+    }
+
+    /// `setFont(Font)`. MIDP specifies that a null reference selects the
+    /// implementation's default font. The state latch is the reusable part of
+    /// the sibling Gothic port's proven `Graphics.setFont/getFont` surface;
+    /// glyph drawing remains a separate device-provider operation.
+    pub fn set_font(&mut self, font: Option<FontSpec>) {
+        self.font = font.unwrap_or(FontSpec::DEFAULT);
+    }
+
+    /// `getFont()` -- the immutable descriptor used by later text operations.
+    pub const fn font(&self) -> FontSpec {
+        self.font
     }
 
     pub fn translate(&mut self, x: i32, y: i32) {
@@ -701,6 +717,29 @@ fn rounded_rect_contains(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn font_state_defaults_sets_and_resets_on_null() {
+        let mut image = Image::create_mutable(2, 2).unwrap();
+        let custom = FontSpec {
+            face: 64,
+            style: 1 | 2,
+            size: 16,
+        };
+        {
+            let mut graphics = Graphics::new(&mut image);
+            assert_eq!(graphics.font(), FontSpec::DEFAULT);
+            graphics.set_font(Some(custom));
+            assert_eq!(graphics.font(), custom);
+            graphics.set_font(None);
+            assert_eq!(graphics.font(), FontSpec::DEFAULT);
+        }
+
+        // A second Graphics over the same target is a fresh Java context; font
+        // state belongs to Graphics, not Image.
+        let graphics = Graphics::new(&mut image);
+        assert_eq!(graphics.font(), FontSpec::DEFAULT);
+    }
 
     #[test]
     fn fill_and_line_respect_clip() {
