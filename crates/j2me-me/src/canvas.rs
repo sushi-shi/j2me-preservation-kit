@@ -3,6 +3,8 @@
 
 use std::collections::VecDeque;
 
+use j2me_jvm::JavaError;
+
 pub const UP: i32 = 1;
 pub const LEFT: i32 = 2;
 pub const RIGHT: i32 = 5;
@@ -159,12 +161,28 @@ impl Displayable for Canvas {
     }
 }
 
+/// A device-visible operation requested through `Display`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HostDisplayOp {
+    /// `Display.vibrate(duration)` on a vibration-capable device.
+    Vibrate { duration_ms: i32 },
+}
+
 #[derive(Debug, Default)]
 pub struct Display {
     has_current: bool,
+    vibration_supported: bool,
+    host_ops: Vec<HostDisplayOp>,
 }
 
 impl Display {
+    pub fn with_vibration_support(vibration_supported: bool) -> Self {
+        Self {
+            vibration_supported,
+            ..Self::default()
+        }
+    }
+
     pub const fn has_current(&self) -> bool {
         self.has_current
     }
@@ -180,6 +198,30 @@ impl Display {
     pub fn clear_current(&mut self, current: &mut Canvas) {
         current.hide_notify();
         self.has_current = false;
+    }
+
+    /// `Display.vibrate(duration)`. Unsupported devices return `false` without
+    /// emitting a host operation; negative durations throw
+    /// `IllegalArgumentException`. Duration zero is retained as the MIDP
+    /// request to stop an active vibration.
+    pub fn vibrate(&mut self, duration_ms: i32) -> Result<bool, JavaError> {
+        if duration_ms < 0 {
+            return Err(JavaError::IllegalArgument("negative vibration duration"));
+        }
+        if self.vibration_supported {
+            self.host_ops.push(HostDisplayOp::Vibrate { duration_ms });
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn host_ops(&self) -> &[HostDisplayOp] {
+        &self.host_ops
+    }
+
+    pub fn drain_host_ops(&mut self) -> Vec<HostDisplayOp> {
+        std::mem::take(&mut self.host_ops)
     }
 }
 
@@ -208,6 +250,24 @@ mod tests {
         assert_eq!(canvas.poll_event(), Some(CanvasEvent::Paint));
         display.clear_current(&mut canvas);
         assert!(!canvas.is_shown());
+    }
+
+    #[test]
+    fn vibration_reports_capability_and_emits_only_supported_requests() {
+        let mut unsupported = Display::default();
+        assert_eq!(unsupported.vibrate(500), Ok(false));
+        assert!(unsupported.host_ops().is_empty());
+
+        let mut supported = Display::with_vibration_support(true);
+        assert_eq!(supported.vibrate(500), Ok(true));
+        assert_eq!(
+            supported.drain_host_ops(),
+            vec![HostDisplayOp::Vibrate { duration_ms: 500 }]
+        );
+        assert!(matches!(
+            supported.vibrate(-1),
+            Err(JavaError::IllegalArgument(_))
+        ));
     }
 }
 

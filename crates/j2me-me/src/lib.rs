@@ -7,8 +7,8 @@
 //! - [`graphics`] — `setColor`/clip/`translate`/`fillRect`/`drawRect`/`drawLine`/
 //!   `drawImage`/`drawRegion` (with `GraphicsError`/`SpriteTransform`) plus
 //!   `drawArc` / `fillArc` (the MIDP ellipse-sector rasteriser);
-//! - [`canvas`] — the `Canvas`/`Display` serial paint-input queue and the
-//!   [`Displayable`] surface trait;
+//! - [`canvas`] — the `Canvas`/`Display` serial paint-input queue, the
+//!   [`Displayable`] surface, and host-visible `Display.vibrate` requests;
 //! - [`media`] — the MMAPI player model with `VolumeControl`
 //!   (`getControl`/`setLevel`/`getLevel`), a `PlayerListener` registration, and
 //!   the `getState()` MMAPI integers;
@@ -27,7 +27,7 @@ pub mod image;
 pub mod media;
 pub mod rms;
 
-pub use canvas::{Canvas, CanvasEvent, Display, Displayable};
+pub use canvas::{Canvas, CanvasEvent, Display, Displayable, HostDisplayOp};
 pub use graphics::{Graphics, GraphicsError, SpriteTransform};
 pub use image::{create_image_named, create_image_region, ImageResources};
 pub use j2me_canvas::{source_over, Argb, Image, ImageError};
