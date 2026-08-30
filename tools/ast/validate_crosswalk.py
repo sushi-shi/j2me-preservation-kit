@@ -38,10 +38,13 @@ The teeth (each proven can-fail by ``--self-test``)
    division paired against a bare ``sm(..)`` call — the exact gothic bug — is red.
 4. Literal / index parity — inside a paired ``op``, the numeric constants each
    side carries (index literals, integer/char literals, numeric arguments) must be
-   equal in value (hex/decimal/suffix forms normalized). A Rust ``entity_row[13]``
+   equal in value (hex/decimal/suffix and unary-sign forms normalized). A Rust ``entity_row[13]``
    paired against the faithful Java ``[10]`` — the build_dialogue_menu crash — is
    red unless documented in ``literal_note`` / ``shape_note``.
-5. Hash locks — the authoritative bytecode Code-attribute digest, the full javac
+5. Crossing-ownership rejection — ordinary ``A-B-A`` pre-order nesting is legal,
+   but ``A-B-A-B`` means two decisions are temporally interleaved. It is red unless
+   an exact body-level ``interleave`` owner group gives the representation reason.
+6. Hash locks — the authoritative bytecode Code-attribute digest, the full javac
    AST digest, each syn AST digest, and the pre-order node-inventory digests are
    all recorded and re-derived from live evidence; a one-node drift breaks a lock.
 
@@ -321,6 +324,39 @@ def _rust_literal_value(text: str) -> int | None:
         return None
 
 
+def _rust_literal_values(nodes: list[tuple[int, int, str]]) -> list[int]:
+    """Collect Rust numeric values, folding an immediately nested unary minus.
+
+    Syn emits ``-1`` in pre-order as adjacent ``UNARY\t-`` / ``LITERAL\t1``
+    nodes, while javac emits ``INT_LITERAL\t-1``. Fold only when the literal is
+    the immediately following node in the same Rust target and inventory; this
+    prevents an owner range or target boundary from manufacturing a sign.
+    """
+
+    ordered = sorted(nodes, key=lambda node: (node[0], node[1]))
+    values: list[int] = []
+    index = 0
+    while index < len(ordered):
+        target, node_index, text = ordered[index]
+        kind, _, detail = text.partition("\t")
+        if kind == "UNARY" and detail.strip() == "-" and index + 1 < len(ordered):
+            next_target, next_index, next_text = ordered[index + 1]
+            value = _rust_literal_value(next_text)
+            if (
+                next_target == target
+                and next_index == node_index + 1
+                and value is not None
+            ):
+                values.append(-value)
+                index += 2
+                continue
+        value = _rust_literal_value(text)
+        if value is not None:
+            values.append(value)
+        index += 1
+    return values
+
+
 def _realizes(kind: str, rust_texts: list[str], must_realize: dict) -> bool:
     operator_pattern, helpers = must_realize[kind]
     for text in rust_texts:
@@ -329,6 +365,140 @@ def _realizes(kind: str, rust_texts: list[str], must_realize: dict) -> bool:
         if any(helper in text for helper in helpers):
             return True
     return False
+
+
+def _crossing_owner_pairs(owners: list[str | None]) -> set[tuple[str, str]]:
+    """Return decision pairs whose projected pre-order is A-B-A-B (or longer).
+
+    Other owners are ignored while examining a pair. This deliberately permits
+    the common A-B-A shape produced when one decision owns a parent plus a later
+    argument and another owns the nested receiver subtree. A fourth alternation
+    cannot be explained by one properly nested interval: the two semantic
+    decisions are interleaved and need an explicit representation justification.
+    """
+
+    names = sorted({owner for owner in owners if owner is not None})
+    crossing: set[tuple[str, str]] = set()
+    for left_index, left in enumerate(names):
+        for right in names[left_index + 1 :]:
+            projected: list[str] = []
+            for owner in owners:
+                if owner not in (left, right):
+                    continue
+                if not projected or projected[-1] != owner:
+                    projected.append(owner)
+            if len(projected) >= 4:
+                crossing.add((left, right))
+    return crossing
+
+
+def _validate_interleave_groups(
+    body: dict[str, Any],
+    label: str,
+    java_decisions: list[str | None],
+    rust_decisions: list[list[str | None]],
+) -> list[str]:
+    """Require an exact, reasoned waiver for each crossing owner pair."""
+
+    errors: list[str] = []
+    Scope = tuple[str, int | None]
+    java_scope: Scope = ("java", None)
+    crossings: dict[Scope, set[tuple[str, str]]] = {
+        java_scope: _crossing_owner_pairs(java_decisions),
+        **{
+            ("rust", target): _crossing_owner_pairs(decisions)
+            for target, decisions in enumerate(rust_decisions)
+        },
+    }
+    known: dict[Scope, set[str]] = {
+        java_scope: {owner for owner in java_decisions if owner is not None},
+        **{
+            ("rust", target): {
+                owner for owner in decisions if owner is not None
+            }
+            for target, decisions in enumerate(rust_decisions)
+        },
+    }
+    covered: dict[Scope, set[tuple[str, str]]] = {
+        scope: set() for scope in crossings
+    }
+    groups = body.get("interleave", [])
+    if not isinstance(groups, list):
+        return [f"{label}: interleave must be an array of owner groups"]
+
+    for index, group in enumerate(groups):
+        context = f"interleave {index}"
+        if not isinstance(group, dict):
+            errors.append(f"{label}: {context} must be a table")
+            continue
+        side = group.get("side")
+        if side not in ("java", "rust"):
+            errors.append(f"{label}: {context} side must be 'java' or 'rust'")
+            continue
+        if side == "java":
+            if "target" in group:
+                errors.append(f"{label}: {context} Java groups must not name target")
+                continue
+            scope = java_scope
+        else:
+            target = group.get("target")
+            if type(target) is not int or not 0 <= target < len(rust_decisions):
+                errors.append(
+                    f"{label}: {context} Rust groups need a valid target index"
+                )
+                continue
+            scope = ("rust", target)
+        reason = group.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"{label}: {context} needs a nonempty reason")
+        owner_group = group.get("owners")
+        if not isinstance(owner_group, list) or len(owner_group) < 2:
+            errors.append(f"{label}: {context} owners must name at least two decisions")
+            continue
+        if not all(isinstance(owner, str) for owner in owner_group):
+            errors.append(f"{label}: {context} owners must all be strings")
+            continue
+        if len(set(owner_group)) != len(owner_group):
+            errors.append(f"{label}: {context} owners must be unique")
+            continue
+        unknown = sorted(set(owner_group) - known[scope])
+        if unknown:
+            scope_name = "java" if side == "java" else f"rust target {scope[1]}"
+            errors.append(
+                f"{label}: {context} names unknown {scope_name} owner(s) {unknown}"
+            )
+            continue
+        pairs = {
+            tuple(sorted((left, right)))
+            for owner_index, left in enumerate(owner_group)
+            for right in owner_group[owner_index + 1 :]
+        }
+        scope_name = "java" if side == "java" else f"rust target {scope[1]}"
+        noncrossing = sorted(pairs - crossings[scope])
+        for left, right in noncrossing:
+            errors.append(
+                f"{label}: {context} names non-crossing {scope_name} owners "
+                f"{left} and {right}"
+            )
+        for pair in sorted(pairs & crossings[scope]):
+            if pair in covered[scope]:
+                errors.append(
+                    f"{label}: {context} duplicates the {scope_name} interleave "
+                    f"waiver for {pair[0]} and {pair[1]}"
+                )
+            else:
+                covered[scope].add(pair)
+
+    for scope, actual in crossings.items():
+        side, target = scope
+        scope_name = "java" if side == "java" else f"rust target {target}"
+        for left, right in sorted(actual - covered[scope]):
+            errors.append(
+                f"{label}: unjustified crossing ownership on {scope_name}: {left} and "
+                f"{right} alternate at least A-B-A-B; split the atomic decisions "
+                "or add an exact interleave owner group with a nonempty reason"
+            )
+    return errors
 
 
 def _validate_body(
@@ -411,21 +581,31 @@ def _validate_body(
     # --- Per-node ownership -------------------------------------------------
     java_owners = [0] * java_count
     rust_owners = [[0] * count for count in rust_counts]
+    java_decisions: list[str | None] = [None] * java_count
+    rust_decisions: list[list[str | None]] = [
+        [None] * count for count in rust_counts
+    ]
     java_texts = list(evidence.java_nodes) if evidence else []
     rust_texts = [list(target.nodes) for target in evidence.rust] if evidence else []
 
-    def claim_java(index: Any, context: str) -> None:
+    def claim_java(index: Any, context: str, owner: str) -> None:
         if not isinstance(index, int) or not 0 <= index < java_count:
             errors.append(f"{label}: {context} claims out-of-range Java node {index!r}")
             return
         java_owners[index] += 1
+        if java_decisions[index] is None:
+            java_decisions[index] = owner
 
-    def claim_rust(value: Any, context: str) -> tuple[int, int] | None:
+    def claim_rust(
+        value: Any, context: str, owner: str
+    ) -> tuple[int, int] | None:
         parsed = _parse_rust_ref(value, rust_counts)
         if parsed is None:
             errors.append(f"{label}: {context} claims invalid Rust node {value!r}")
             return None
         rust_owners[parsed[0]][parsed[1]] += 1
+        if rust_decisions[parsed[0]][parsed[1]] is None:
+            rust_decisions[parsed[0]][parsed[1]] = owner
         return parsed
 
     operations = body.get("op", [])
@@ -435,6 +615,7 @@ def _validate_body(
 
     for index, op in enumerate(operations):
         context = f"op {index} ({op.get('semantic', 'unnamed')!r})"
+        owner = f"op:{index}"
         if not op.get("semantic"):
             errors.append(f"{label}: {context} needs a semantic comment")
         java_refs = _java_refs(op)
@@ -454,16 +635,19 @@ def _validate_body(
                 )
         op_java_texts: list[str] = []
         for ref in java_refs:
-            claim_java(ref, context)
+            claim_java(ref, context, owner)
             if isinstance(ref, int) and 0 <= ref < len(java_texts):
                 op_java_texts.append(java_texts[ref])
         op_rust_texts: list[str] = []
+        op_rust_nodes: list[tuple[int, int, str]] = []
         for ref in rust_refs:
-            parsed = claim_rust(ref, context)
+            parsed = claim_rust(ref, context, owner)
             if parsed is not None and parsed[0] < len(rust_texts):
                 target_nodes = rust_texts[parsed[0]]
                 if parsed[1] < len(target_nodes):
-                    op_rust_texts.append(target_nodes[parsed[1]])
+                    text = target_nodes[parsed[1]]
+                    op_rust_texts.append(text)
+                    op_rust_nodes.append((parsed[0], parsed[1], text))
         op_java_kinds = [text.split("\t", 1)[0] for text in op_java_texts]
         # Atomic operator-realization parity (the paint_radio_row bug-catcher).
         if evidence is not None and not op.get("shape_note"):
@@ -487,9 +671,7 @@ def _validate_body(
                 if (value := _java_literal_value(text)) is not None
             )
             rust_literals = Counter(
-                value
-                for text in op_rust_texts
-                if (value := _rust_literal_value(text)) is not None
+                _rust_literal_values(op_rust_nodes)
             )
             java_only = list((java_literals - rust_literals).elements())
             rust_only = list((rust_literals - java_literals).elements())
@@ -506,6 +688,7 @@ def _validate_body(
 
     for index, adapt in enumerate(adaptations):
         context = f"adapt {index}"
+        owner = f"adapt:{index}"
         category = adapt.get("category")
         if category not in ADAPT_CATEGORIES:
             errors.append(
@@ -521,9 +704,13 @@ def _validate_body(
         if not java_refs and not rust_refs:
             errors.append(f"{label}: {context} names no nodes")
         for ref in java_refs:
-            claim_java(ref, context)
+            claim_java(ref, context, owner)
         for ref in rust_refs:
-            claim_rust(ref, context)
+            claim_rust(ref, context, owner)
+
+    errors.extend(
+        _validate_interleave_groups(body, label, java_decisions, rust_decisions)
+    )
 
     for index, owners in enumerate(java_owners):
         if owners > 1:
@@ -643,6 +830,8 @@ def format_coverage(report: Report) -> str:
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 DEFAULT_MANIFEST = FIXTURE_DIR / "paint_radio_row.crosswalk.toml"
 DEFAULT_EVIDENCE = FIXTURE_DIR / "paint_radio_row.evidence.toml"
+INTERLEAVE_MANIFEST = FIXTURE_DIR / "temporal_interleave.crosswalk.toml"
+INTERLEAVE_EVIDENCE = FIXTURE_DIR / "temporal_interleave.evidence.toml"
 
 
 def self_test(manifest: dict, evidence_data: dict) -> int:
@@ -701,6 +890,33 @@ def self_test(manifest: dict, evidence_data: dict) -> int:
             )
             return 1
 
+    # A legitimate cross-language staging difference is green only while its
+    # exact owner group and reason remain present. Removing that waiver must
+    # expose the otherwise complete A-B-A-B ownership partition.
+    interleave_manifest = tomllib.loads(
+        INTERLEAVE_MANIFEST.read_text(encoding="utf-8")
+    )
+    interleave_evidence = load_evidence(
+        tomllib.loads(INTERLEAVE_EVIDENCE.read_text(encoding="utf-8"))
+    )
+    report = validate(interleave_manifest, interleave_evidence, strict=True)
+    if report.errors:
+        print(
+            "self-test: reasoned temporal-interleave fixture is red:\n"
+            + "\n".join(report.errors),
+            file=sys.stderr,
+        )
+        return 1
+    del interleave_manifest["body"][0]["interleave"]
+    report = validate(interleave_manifest, interleave_evidence, strict=True)
+    if not any("unjustified crossing ownership" in error for error in report.errors):
+        print(
+            "self-test: removing an interleave owner group did not trip crossing "
+            "ownership",
+            file=sys.stderr,
+        )
+        return 1
+
     # A one-node drift in the LIVE evidence must break the node-inventory lock.
     drifted = copy.deepcopy(evidence_data)
     drifted_body = drifted["body"][0]
@@ -735,7 +951,8 @@ def self_test(manifest: dict, evidence_data: dict) -> int:
         "crosswalk self-test ok: 5 manifest perturbations (dropped decision, coarse "
         "blanket, bytecode/Java-AST/Rust-AST digest) each went red; a one-node "
         "evidence drift broke the node-inventory lock; and a substituted Rust "
-        "literal tripped the literal/index parity tooth"
+        "literal tripped the literal/index parity tooth; removing a reasoned "
+        "interleave owner group tripped crossing ownership"
     )
     return 0
 

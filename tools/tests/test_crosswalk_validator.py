@@ -31,6 +31,9 @@ BUGGY = _load("paint_radio_row.buggy.toml")
 ENTITY_EVIDENCE = _load("entity_row_index.evidence.toml")
 ENTITY_GOOD = _load("entity_row_index.crosswalk.toml")
 ENTITY_BAD = _load("entity_row_index.badindex.toml")
+INTERLEAVE_EVIDENCE = _load("temporal_interleave.evidence.toml")
+INTERLEAVE_GOOD = _load("temporal_interleave.crosswalk.toml")
+INTERLEAVE_UNJUSTIFIED = _load("temporal_interleave.unjustified.toml")
 
 
 def _synthetic() -> tuple[dict, dict]:
@@ -91,6 +94,45 @@ def _synthetic() -> tuple[dict, dict]:
             }
         ],
     }
+    return manifest, evidence
+
+
+def _two_target_interleave() -> tuple[dict, dict]:
+    """Both Rust targets cross identically; only target 0 is waived."""
+
+    manifest = copy.deepcopy(INTERLEAVE_GOOD)
+    evidence = copy.deepcopy(INTERLEAVE_EVIDENCE)
+    body = manifest["body"][0]
+    evidence_body = evidence["body"][0]
+    second_manifest_target = copy.deepcopy(body["rust"][0])
+    second_manifest_target["file"] = "second.rs"
+    second_manifest_target["item"] = "fn:second"
+    body["rust"].append(second_manifest_target)
+    second_evidence_target = copy.deepcopy(evidence_body["rust"][0])
+    second_evidence_target["file"] = "second.rs"
+    second_evidence_target["item"] = "fn:second"
+    evidence_body["rust"].append(second_evidence_target)
+
+    left = [0, 1, 2, 6, 7, 8]
+    right = [3, 4, 5, 9, 10, 11]
+    body["op"][0].pop("rust_range")
+    body["op"][1].pop("rust_range")
+    body["op"][0]["rust"] = [
+        *(f"0:{index}" for index in left),
+        *(f"1:{index}" for index in left),
+    ]
+    body["op"][1]["rust"] = [
+        *(f"0:{index}" for index in right),
+        *(f"1:{index}" for index in right),
+    ]
+    body["interleave"].append(
+        {
+            "side": "rust",
+            "target": 0,
+            "owners": ["op:0", "op:1"],
+            "reason": "Target zero stages the two values across its call tree.",
+        }
+    )
     return manifest, evidence
 
 
@@ -214,6 +256,58 @@ class CrosswalkValidatorTests(unittest.TestCase):
         report = validate(manifest, load_evidence(evidence), strict=True)
         self.assertEqual(report.errors, [], report.errors)
 
+    def test_unary_negative_rust_literals_match_signed_java_values(self) -> None:
+        for magnitude in (1, 123):
+            with self.subTest(magnitude=magnitude):
+                manifest, evidence = _synthetic()
+                java_nodes = [f"INT_LITERAL\t-{magnitude}"]
+                rust_nodes = ["UNARY\t-", f"LITERAL\t{magnitude}"]
+                evidence["body"][0]["java_nodes"] = java_nodes
+                evidence["body"][0]["rust"][0]["nodes"] = rust_nodes
+                body = manifest["body"][0]
+                body["java_nodes_sha256"] = node_inventory_digest(java_nodes)
+                body["rust"][0]["nodes_sha256"] = node_inventory_digest(rust_nodes)
+                body["java_node_count"] = len(java_nodes)
+                body["rust"][0]["node_count"] = len(rust_nodes)
+                rust_claim = (
+                    {"rust_range": [{"target": 0, "start": 0, "end": 1}]}
+                    if magnitude == 1
+                    else {"rust": ["0:1", "0:0"]}
+                )
+                body["op"] = [
+                    {
+                        "semantic": f"return signed {-magnitude}",
+                        "java": [0],
+                        **rust_claim,
+                    }
+                ]
+                report = validate(manifest, load_evidence(evidence), strict=True)
+                self.assertEqual(report.errors, [], report.errors)
+
+    def test_wrong_unary_negative_rust_literal_is_rejected(self) -> None:
+        manifest, evidence = _synthetic()
+        java_nodes = ["INT_LITERAL\t-1"]
+        rust_nodes = ["UNARY\t-", "LITERAL\t2"]
+        evidence["body"][0]["java_nodes"] = java_nodes
+        evidence["body"][0]["rust"][0]["nodes"] = rust_nodes
+        body = manifest["body"][0]
+        body["java_nodes_sha256"] = node_inventory_digest(java_nodes)
+        body["rust"][0]["nodes_sha256"] = node_inventory_digest(rust_nodes)
+        body["java_node_count"] = len(java_nodes)
+        body["rust"][0]["node_count"] = len(rust_nodes)
+        body["op"] = [
+            {
+                "semantic": "wrong signed sentinel",
+                "java": [0],
+                "rust_range": [{"target": 0, "start": 0, "end": 1}],
+            }
+        ]
+        report = validate(manifest, load_evidence(evidence), strict=True)
+        self.assertTrue(
+            any("literal -2 != -1" in error for error in report.errors),
+            report.errors,
+        )
+
     def test_literal_note_documents_a_sanctioned_transform(self) -> None:
         # A genuine value transform (index+1, const lifting) is allowed once noted.
         manifest, evidence = _synthetic()
@@ -239,6 +333,110 @@ class CrosswalkValidatorTests(unittest.TestCase):
         )
         body["op"] = [{**op, "literal_note": "Rust stores the 1-based row index"}]
         self.assertEqual(validate(manifest, load_evidence(evidence), strict=True).errors, [])
+
+    def test_reasoned_temporal_interleave_is_green(self) -> None:
+        report = validate(
+            INTERLEAVE_GOOD, load_evidence(INTERLEAVE_EVIDENCE), strict=True
+        )
+        self.assertEqual(report.errors, [])
+
+    def test_ordinary_aba_ast_nesting_needs_no_waiver(self) -> None:
+        manifest = copy.deepcopy(INTERLEAVE_GOOD)
+        body = manifest["body"][0]
+        del body["interleave"]
+        body["op"][0]["java"] = [0, 1, 2, 6, 7, 8, 9, 10, 11]
+        body["op"][1]["java"] = [3, 4, 5]
+        report = validate(manifest, load_evidence(INTERLEAVE_EVIDENCE), strict=True)
+        self.assertEqual(report.errors, [])
+
+    def test_temporal_interleave_waiver_removal_is_rejected(self) -> None:
+        report = validate(
+            INTERLEAVE_UNJUSTIFIED, load_evidence(INTERLEAVE_EVIDENCE), strict=True
+        )
+        self.assertTrue(
+            any("unjustified crossing ownership" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_temporal_interleave_unknown_owner_is_rejected(self) -> None:
+        manifest = copy.deepcopy(INTERLEAVE_GOOD)
+        manifest["body"][0]["interleave"][0]["owners"][1] = "op:99"
+        report = validate(manifest, load_evidence(INTERLEAVE_EVIDENCE), strict=True)
+        self.assertTrue(
+            any("unknown java owner" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_temporal_interleave_noncrossing_group_is_rejected(self) -> None:
+        manifest = copy.deepcopy(FINE)
+        manifest["body"][0]["interleave"] = [
+            {
+                "side": "java",
+                "owners": ["op:0", "op:1"],
+                "reason": "These decisions are actually contiguous.",
+            }
+        ]
+        report = validate(manifest, load_evidence(EVIDENCE), strict=True)
+        self.assertTrue(
+            any("non-crossing java owners" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_temporal_interleave_reason_must_be_nonempty(self) -> None:
+        manifest = copy.deepcopy(INTERLEAVE_GOOD)
+        manifest["body"][0]["interleave"][0]["reason"] = "  "
+        report = validate(manifest, load_evidence(INTERLEAVE_EVIDENCE), strict=True)
+        self.assertTrue(
+            any("needs a nonempty reason" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_temporal_interleave_duplicate_group_is_rejected(self) -> None:
+        manifest = copy.deepcopy(INTERLEAVE_GOOD)
+        manifest["body"][0]["interleave"].append(
+            copy.deepcopy(manifest["body"][0]["interleave"][0])
+        )
+        report = validate(manifest, load_evidence(INTERLEAVE_EVIDENCE), strict=True)
+        self.assertTrue(
+            any("duplicates the java interleave waiver" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_java_interleave_group_rejects_target(self) -> None:
+        manifest = copy.deepcopy(INTERLEAVE_GOOD)
+        manifest["body"][0]["interleave"][0]["target"] = 0
+        report = validate(manifest, load_evidence(INTERLEAVE_EVIDENCE), strict=True)
+        self.assertTrue(
+            any("Java groups must not name target" in error for error in report.errors),
+            report.errors,
+        )
+
+    def test_rust_interleave_waiver_is_target_local(self) -> None:
+        manifest, evidence = _two_target_interleave()
+        report = validate(manifest, load_evidence(evidence), strict=True)
+        self.assertTrue(
+            any(
+                "unjustified crossing ownership on rust target 1" in error
+                for error in report.errors
+            ),
+            report.errors,
+        )
+        self.assertFalse(
+            any(
+                "unjustified crossing ownership on rust target 0" in error
+                for error in report.errors
+            ),
+            report.errors,
+        )
+
+    def test_rust_interleave_group_requires_target(self) -> None:
+        manifest, evidence = _two_target_interleave()
+        del manifest["body"][0]["interleave"][1]["target"]
+        report = validate(manifest, load_evidence(evidence), strict=True)
+        self.assertTrue(
+            any("Rust groups need a valid target index" in error for error in report.errors),
+            report.errors,
+        )
 
     def test_undecided_nodes_are_counted_and_body_partial(self) -> None:
         manifest, evidence = _synthetic()

@@ -31,6 +31,7 @@ categorized one-sided adaptation.
 | `semantic_status = "crosswalked"` on any full-coverage body | `crosswalked` **requires** zero undecided nodes |
 | node counts (`java_node_count`, `rust_node_counts`) | same, plus `java_nodes_sha256` and per-target `nodes_sha256` node-inventory locks |
 | — | `code_sha256` / `opcode_sha256` / `java_ast_sha256` / per-target `ast_sha256`, re-derived from live evidence |
+| crossing decision ownership was unchecked | `A-B-A-B` ownership is rejected unless an exact `interleave = [{ side, owners, reason }]` group justifies it |
 
 ## Recommended per-body procedure
 
@@ -58,10 +59,29 @@ categorized one-sided adaptation.
    `op.literal_note`.
 5. **Categorize every one-sided node.** A Rust-only host/representation adapter or
    a Java-only erased/no-op node goes in `adapt` with a category and a reason.
-6. **Lock the digests.** Record `code_sha256`, `opcode_sha256`, `java_ast_sha256`,
+6. **Resolve crossing owners.** Ordinary AST nesting can make one decision wrap
+   another as `A-B-A`; leave that alone. If two decisions alternate `A-B-A-B`,
+   first check for an accidental temporal fold and split or reclassify the nodes.
+   When staging, branch expansion, or a representation adapter genuinely makes
+   the crossing necessary, add one exact body-level group such as:
+
+   ```toml
+   interleave = [
+     { side = "rust", target = 0, owners = ["op:17", "op:18", "op:19"],
+       reason = "Rust pre-reads the three drawRegion arguments in JVM fault order, then passes them in one call subtree." },
+   ]
+   ```
+
+   Owner names use zero-based `op:N` / `adapt:N` positions. Rust groups require
+   their exact `target`; Java groups reject `target`. Every pair in the group must
+   actually cross in that one side/target; unknown owners, non-crossing pairs,
+   duplicate owners or duplicate waiver groups, stale groups, and blank reasons
+   are rejected. Prefer fixing the partition over adding a group: the group is an
+   auditable exception, not a blanket flag.
+7. **Lock the digests.** Record `code_sha256`, `opcode_sha256`, `java_ast_sha256`,
    `java_nodes_sha256`, and per-target `ast_sha256` / `nodes_sha256`; the wrapper
    recomputes them from live sources so any later drift is red.
-7. **Do not mark `crosswalked` until coverage is 100%.** `--coverage` shows
+8. **Do not mark `crosswalked` until coverage is 100%.** `--coverage` shows
    `decided/total` per body; a partial body is honest work-in-progress, not a
    verified one. `--strict` requires zero undecided nodes across the manifest.
 
