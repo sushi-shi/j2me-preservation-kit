@@ -25,6 +25,11 @@
 //! method surface including `readUTF`. `readUTF` is seeded with the modified
 //! UTF-8 decoder proven on the silent-hill port (`orphan-formats`), including
 //! its accept-a-raw-`0` quirk.
+//!
+//! The output stream owns a `ByteArrayOutputStream`-compatible memory sink.
+//! Closing that exact pairing flushes and closes a sink whose `close()` is a
+//! no-op: accumulated bytes and earlier `toByteArray()` copies remain valid,
+//! and the memory sink remains writable just as Java's byte-array stream does.
 
 use crate::{JavaError, JavaResult};
 
@@ -481,6 +486,16 @@ impl DataOutputStream {
         &self.data
     }
 
+    /// `close()` for this stream's owned `ByteArrayOutputStream`-compatible
+    /// backing.
+    ///
+    /// `DataOutputStream.close()` delegates through `FilterOutputStream` to
+    /// the backing stream after flushing it. `ByteArrayOutputStream.flush()`
+    /// and `close()` are both no-ops, so the accumulated buffer is retained and
+    /// remains writable. Any byte-array copy obtained before closing remains an
+    /// independent snapshot.
+    pub const fn close(&mut self) {}
+
     /// `writeByte(int)` -- writes the low eight bits.
     pub fn write_byte(&mut self, value: i32) {
         self.data.push(value as u8);
@@ -660,6 +675,23 @@ mod tests {
         let mut input = DataInputStream::new(&bytes);
         assert_eq!(input.read_utf().unwrap(), value.to_vec());
         assert!(input.is_empty());
+    }
+
+    #[test]
+    fn closing_byte_array_output_preserves_buffer_copy_and_writability() {
+        let mut output = DataOutputStream::new();
+        output.write_int(0x1234_5678);
+
+        // ByteArrayOutputStream.toByteArray() returns an independent snapshot.
+        let snapshot = output.as_bytes().to_vec();
+        output.close();
+        assert_eq!(output.as_bytes(), snapshot);
+
+        // Closing ByteArrayOutputStream has no effect; writes may continue, and
+        // the earlier toByteArray snapshot cannot change with the backing sink.
+        output.write_byte(0x9a);
+        assert_eq!(snapshot, [0x12, 0x34, 0x56, 0x78]);
+        assert_eq!(output.as_bytes(), [0x12, 0x34, 0x56, 0x78, 0x9a]);
     }
 
     #[test]

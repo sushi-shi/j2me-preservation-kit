@@ -30,6 +30,11 @@ second cursor, so ranged streams, mark/reset, and partial consumption before an
 ordinary `std` runtime layer; only the separate bounded serialization codecs
 are intended to be `no_std`.
 
+`DataOutputStream` owns a `ByteArrayOutputStream`-compatible memory sink.
+Closing this exact pairing is a no-op: accumulated bytes remain available, an
+earlier byte-array snapshot remains an independent copy, and the sink remains
+writable, matching Java's byte-array stream contract.
+
 Its `java.lang.Thread` layer is cooperative and deterministic: constructing a
 thread allocates identity, `start()` queues that identity exactly once, and the
 host explicitly dispatches the queued Runnable. During dispatch,
