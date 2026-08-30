@@ -95,6 +95,13 @@ A method is reviewed only when all of the following are present and green:
 An AST node-count match is not equivalence by itself. The semantic crosswalk and
 live behavioral oracle are both mandatory.
 
+Java differential harnesses must stay below the JVM's 65,535-byte `Code`
+attribute limit per method. Keep `main` as a small ordered dispatcher and put
+each admission's cases in a bounded `trace…` helper (passing an explicit shared
+context or the exact reflected fields it needs). Never grow one monolithic
+driver method; `javac: code too large` is an oracle-architecture failure, not a
+reason to drop cases. Preserve output order when extracting an existing tranche.
+
 ## Gate workflow
 
 - Use `just check-affected` for the inner loop. Gate groups are selected from

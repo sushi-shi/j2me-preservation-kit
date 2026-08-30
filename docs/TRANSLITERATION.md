@@ -95,6 +95,27 @@ that assumed the sign bit. Convert to `u8` **only** at the true host boundary
 (handing bytes to a decoder outside the port, hashing) — never inside the
 transliterated logic.
 
+### Identity-bearing `Object` values
+
+The value-oriented rows above apply only when Java reference identity cannot be
+observed. Once a body reaches `new Integer`, `Object[]`, `instanceof`,
+`checkcast`, or virtual `Object.equals`, use `j2me-jvm`'s generic object seam:
+
+- store `JavaObjectRef`; use `Option<JavaObjectRef>` for Java `null`;
+- let the host own the arena and class table behind `JavaObjectRuntime`;
+- use `new_integer` for `new Integer` so equal values still receive fresh
+  identities;
+- use the provided cast and reference-array wrappers so null, negative-length,
+  bounds, and cast failures occur before/at the same operation as on the JVM;
+- obtain String payloads as exact UTF-16 with `string_utf16`; and
+- route every `receiver.equals(argument)` through `object_equals`, even when the
+  handles are equal or their current payloads look equal.
+
+The seam deliberately does not provide a heap or a default equality policy.
+The host adapter must perform dynamic dispatch, array component checks, and
+allocation, and it may re-enter or fail. Keep those calls in Java evaluation
+order and reread live game fields after a callback whenever the source does.
+
 ## Arithmetic
 
 See `docs/ARITHMETIC_AND_RUNTIME.md` (home) for the full contract; the rules that
@@ -255,6 +276,14 @@ Every oracle carries:
   cross-frame mismatch) proven to turn the gate red, so an agreement that survived
   a real mismatch cannot read as a pass.
 - **Loud failure when `_originals/` is absent** — never a skip that reads green.
+
+For Java reflection/trace harnesses, make the entry point an ordered dispatcher
+from the start. Put each admitted body or tightly coupled tranche in its own
+bounded `trace…` helper and pass a small explicit context (or only the reflected
+members it consumes). A monolithic `main` eventually exceeds the classfile
+limit of 65,535 Code bytes per method; splitting only after `javac` reports
+`code too large` creates avoidable integration conflicts. Helper extraction must
+leave trace-line order and hostile failure observations byte-for-byte unchanged.
 
 ## Verification
 

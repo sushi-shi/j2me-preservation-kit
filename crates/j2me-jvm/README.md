@@ -42,6 +42,13 @@ host explicitly dispatches the queued Runnable. During dispatch,
 `Thread.currentThread()` would return. The runtime never invents native-thread
 timing, so headless tests and web hosts share the same ordering contract.
 
+Its `java.lang.Object` layer uses opaque, copyable reference handles backed by
+a host-owned arena. `Option<JavaObjectRef>` is Java null, while allocation,
+runtime type tests/casts, nullable reference arrays, exact UTF-16 String access,
+and virtual `Object.equals` stay behind `JavaObjectRuntime`. This preserves
+aliases, constructor identity, callback failure cuts, and dynamic dispatch
+without adding a partial VM or treating Java objects as Rust values.
+
 ## Usage
 
 ```rust
@@ -84,6 +91,23 @@ threads
         Ok::<_, ()>(())
     })
     .unwrap();
+```
+
+Identity-bearing `Object` values use the host boundary rather than a copied
+value enum:
+
+```rust,no_run
+use j2me_jvm::{check_cast, new_integer, JavaClassRef, JavaObjectRuntime};
+
+fn translated<R: JavaObjectRuntime>(
+    runtime: &mut R,
+    integer_class: JavaClassRef,
+) -> Result<(), R::Error> {
+    let value = new_integer(runtime, 7)?; // every call is a fresh Java object
+    let same = check_cast(runtime, Some(value), integer_class)?;
+    assert_eq!(same, Some(value));
+    Ok(())
+}
 ```
 
 ## License

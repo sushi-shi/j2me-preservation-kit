@@ -20,6 +20,13 @@
 //! [`random`] adds the JVM's 48-bit LCG ([`Random`]) so every port shares one
 //! bit-identical `java.util.Random` instead of duplicating it.
 //!
+//! ## `java.lang.Object` references
+//!
+//! [`object`] supplies opaque [`JavaObjectRef`] / [`JavaClassRef`] handles and
+//! the host-owned [`JavaObjectRuntime`] boundary for allocations, casts,
+//! reference arrays, Java Strings, and virtual `Object.equals`. It preserves
+//! identity and dispatch without pretending that a Rust enum is a Java heap.
+//!
 //! ## `java.lang.Math` and numeric conversions
 //!
 //! [`math`] names the `java.lang.Math` helpers and JVM narrowing casts whose
@@ -51,12 +58,18 @@
 
 pub mod io;
 pub mod math;
+pub mod object;
 pub mod parse;
 pub mod random;
 pub mod thread;
 
 pub use io::{ByteArrayInputStream, DataInputStream, DataOutputStream};
 pub use math::{d2f, f2i, f2l, fsqrt, i2f, iabs, imax, imin, ineg};
+pub use object::{
+    check_cast, instance_of, integer_to_string, new_integer, new_reference_array, object_equals,
+    reference_array_get, reference_array_length, reference_array_set, string_utf16, JavaClassRef,
+    JavaObjectRef, JavaObjectRuntime,
+};
 pub use parse::{parse_int, parse_int_opt};
 pub use random::Random;
 pub use thread::{HostThreadOp, RunnableId, ThreadId, ThreadRuntime, ThreadState};
