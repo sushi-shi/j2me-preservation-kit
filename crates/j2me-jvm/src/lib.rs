@@ -29,11 +29,12 @@
 //!
 //! ## `java.io.DataInputStream` / `DataOutputStream`
 //!
-//! [`io`] is the big-endian, signed `DataInput`/`DataOutput` stream codec over
-//! an in-memory `&[u8]`, including `readUTF`/`writeUTF` modified UTF-8. It is
-//! distinct from `j2me-codec`'s `no_std` bounded reader: this one is `std`,
-//! returns [`JavaError`]/[`JavaResult`], and mirrors the full Java method
-//! surface.
+//! [`io`] provides an owned [`ByteArrayInputStream`] with exact Java
+//! `buf`/`pos`/`mark`/`count` state, plus the big-endian, signed
+//! [`DataInputStream`] / [`DataOutputStream`] codec including modified-UTF-8
+//! `readUTF`/`writeUTF`. It is distinct from `j2me-codec`'s `no_std` bounded
+//! reader: this layer is `std`, returns [`JavaError`]/[`JavaResult`], and
+//! preserves Java stream cursor mutation at failure boundaries.
 //!
 //! ## `java.lang.Integer.parseInt`
 //!
@@ -46,7 +47,7 @@ pub mod math;
 pub mod parse;
 pub mod random;
 
-pub use io::{DataInputStream, DataOutputStream};
+pub use io::{ByteArrayInputStream, DataInputStream, DataOutputStream};
 pub use math::{d2f, f2i, f2l, fsqrt, i2f, iabs, imax, imin, ineg};
 pub use parse::{parse_int, parse_int_opt};
 pub use random::Random;
@@ -58,6 +59,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JavaError {
     NullPointer,
+    IndexOutOfBounds,
     ArrayIndexOutOfBounds { index: i32, length: i32 },
     NegativeArraySize { length: i32 },
     Arithmetic,
@@ -72,6 +74,7 @@ impl fmt::Display for JavaError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NullPointer => write!(formatter, "NullPointerException"),
+            Self::IndexOutOfBounds => write!(formatter, "IndexOutOfBoundsException"),
             Self::ArrayIndexOutOfBounds { index, length } => write!(
                 formatter,
                 "ArrayIndexOutOfBoundsException: index {index}, length {length}"

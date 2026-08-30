@@ -22,6 +22,14 @@ A foundation crate of the J2ME preservation stack, with no dependencies. The
 device runtime (`j2me-me`) and every game body route their arithmetic and array
 access through it.
 
+Its `java.io` layer owns the exact four-field state of
+`ByteArrayInputStream` (`buf`, `pos`, `mark`, and `count`). A
+`DataInputStream` owns and delegates to that stream rather than keeping a
+second cursor, so ranged streams, mark/reset, and partial consumption before an
+`EOFException` remain observable exactly as they are on the JVM. This is an
+ordinary `std` runtime layer; only the separate bounded serialization codecs
+are intended to be `no_std`.
+
 ## Usage
 
 ```rust
@@ -32,6 +40,21 @@ assert_eq!(i32_add(i32::MAX, 1), i32::MIN);
 
 // division by zero is an ArithmeticException, not a panic
 assert_eq!(java_div(1, 0), Err(JavaError::Arithmetic));
+```
+
+An owned stream can move through a `DataInputStream` without copying its
+backing allocation or losing its cursor:
+
+```rust
+use j2me_jvm::{ByteArrayInputStream, DataInputStream};
+
+let stream = ByteArrayInputStream::new_range(vec![0, 0x12, 0x34, 9], 1, 2);
+let mut input = DataInputStream::from_stream(stream);
+assert_eq!(input.read_unsigned_short().unwrap(), 0x1234);
+
+let stream = input.into_inner();
+assert_eq!(stream.position(), 3);
+assert_eq!(stream.available(), 0);
 ```
 
 ## License

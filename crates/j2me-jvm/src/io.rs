@@ -8,14 +8,16 @@
 //! compare glyph and sprite bytes against negative sentinels, so the signedness
 //! is behavior, not cosmetics.
 //!
-//! ## `&[u8]` borrow convention
+//! ## Owned input-stream state
 //!
-//! [`DataInputStream`] **borrows** the input as `&'a [u8]` and tracks a cursor,
-//! rather than owning a buffer or wrapping a `Read`. That is stalker's
-//! convention (a `ByteArrayInputStream` is already an in-memory slice, so the
-//! reader is zero-copy and a failed read consumes nothing), and it is the one
-//! adopted here. Reads that borrow from the input — `read_bytes`, `read_utf` —
-//! return owned `Vec`s so the cursor can keep advancing.
+//! [`ByteArrayInputStream`] owns the Java stream's exact `buf` / `pos` / `mark`
+//! / `count` state. [`DataInputStream`] owns that stream and delegates to its
+//! one cursor; it does not maintain a second position. This matters at EOF:
+//! Java primitive reads consume the available prefix before throwing
+//! `EOFException`, and a ranged byte-array stream may end before `buf.len()`.
+//! `DataInputStream::new` remains a convenient slice-copying constructor, while
+//! [`DataInputStream::from_stream`] and [`DataInputStream::into_inner`] preserve
+//! an already-owned stream and make its final cursor state observable.
 //!
 //! Distinct from `j2me-codec`'s `no_std` bounded `Reader`: this layer is `std`,
 //! returns [`JavaError`]/[`JavaResult`] to model Java's `EOFException` /
@@ -26,90 +28,286 @@
 
 use crate::{JavaError, JavaResult};
 
-/// `java.io.DataInputStream` wrapping a `ByteArrayInputStream`.
-#[derive(Debug, Clone)]
-pub struct DataInputStream<'a> {
-    data: &'a [u8],
-    position: usize,
+fn eof() -> JavaError {
+    JavaError::Io("EOFException".to_string())
 }
 
-impl<'a> DataInputStream<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
-        Self { data, position: 0 }
+/// An owned `java.io.ByteArrayInputStream`.
+///
+/// The Java class retains the supplied array without copying it and carries
+/// four fields: `buf`, `pos`, `mark`, and `count`. The positions stay as `i32`
+/// rather than `usize` because the ranged Java constructor performs no bounds
+/// validation and computes `offset + length` with wrapping JVM `int`
+/// arithmetic. Ordinary callers create valid states, but preserving malformed
+/// states lets hostile differential tests observe the same later failures.
+#[derive(Debug, Clone)]
+pub struct ByteArrayInputStream {
+    buf: Vec<u8>,
+    pos: i32,
+    mark: i32,
+    count: i32,
+}
+
+impl ByteArrayInputStream {
+    /// `new ByteArrayInputStream(buf)`; takes ownership without copying.
+    pub fn new(buf: Vec<u8>) -> Self {
+        let count = i32::try_from(buf.len()).expect("Java byte[] length exceeds i32::MAX");
+        Self {
+            buf,
+            pos: 0,
+            mark: 0,
+            count,
+        }
     }
 
-    /// Bytes consumed so far. Useful for reporting where a parse failed.
-    pub fn position(&self) -> usize {
-        self.position
+    /// Slice-copying convenience constructor for host-provided bytes.
+    pub fn from_slice(buf: &[u8]) -> Self {
+        Self::new(buf.to_vec())
     }
 
-    /// `available()`.
-    pub fn available(&self) -> usize {
-        self.data.len().saturating_sub(self.position)
+    /// `new ByteArrayInputStream(buf, offset, length)`.
+    ///
+    /// Java deliberately does not validate `offset` or `length` here. `pos`
+    /// and `mark` become `offset`, while `count` is
+    /// `min(offset + length, buf.length)` after wrapping `int` addition.
+    pub fn new_range(buf: Vec<u8>, offset: i32, length: i32) -> Self {
+        let buf_length = i32::try_from(buf.len()).expect("Java byte[] length exceeds i32::MAX");
+        Self {
+            buf,
+            pos: offset,
+            mark: offset,
+            count: offset.wrapping_add(length).min(buf_length),
+        }
+    }
+
+    pub fn buffer(&self) -> &[u8] {
+        &self.buf
+    }
+
+    pub fn position(&self) -> i32 {
+        self.pos
+    }
+
+    pub fn mark_position(&self) -> i32 {
+        self.mark
+    }
+
+    pub fn count(&self) -> i32 {
+        self.count
+    }
+
+    /// `InputStream.read()` -- `0..=255`, or `-1` at EOF.
+    pub fn read(&mut self) -> JavaResult<i32> {
+        if self.pos >= self.count {
+            return Ok(-1);
+        }
+        // `buf[pos++]` increments `pos` before the JVM array-bounds check.
+        let index = self.pos;
+        self.pos = self.pos.wrapping_add(1);
+        let byte = usize::try_from(index)
+            .ok()
+            .and_then(|index| self.buf.get(index))
+            .ok_or(JavaError::ArrayIndexOutOfBounds {
+                index,
+                length: self.buf.len() as i32,
+            })?;
+        Ok(i32::from(*byte))
+    }
+
+    /// `InputStream.read(byte[], int, int)`.
+    ///
+    /// Destination bounds are checked before EOF. The Java implementation then
+    /// checks EOF before the zero-length special case, so a zero-length read at
+    /// EOF returns `-1`, while the same read before EOF returns `0`.
+    pub fn read_range(&mut self, buffer: &mut [i8], offset: i32, length: i32) -> JavaResult<i32> {
+        let buffer_length =
+            i32::try_from(buffer.len()).expect("Java byte[] length exceeds i32::MAX");
+        if offset < 0 || length < 0 || length > buffer_length.wrapping_sub(offset) {
+            return Err(JavaError::IndexOutOfBounds);
+        }
+        if self.pos >= self.count {
+            return Ok(-1);
+        }
+        let available = self.count.wrapping_sub(self.pos);
+        let copied = length.min(available);
+        if copied <= 0 {
+            return Ok(0);
+        }
+
+        let source_offset = usize::try_from(self.pos).map_err(|_| JavaError::IndexOutOfBounds)?;
+        let destination_offset =
+            usize::try_from(offset).map_err(|_| JavaError::IndexOutOfBounds)?;
+        let copied = usize::try_from(copied).map_err(|_| JavaError::IndexOutOfBounds)?;
+        let source_end = source_offset
+            .checked_add(copied)
+            .ok_or(JavaError::IndexOutOfBounds)?;
+        let destination_end = destination_offset
+            .checked_add(copied)
+            .ok_or(JavaError::IndexOutOfBounds)?;
+        let source = self
+            .buf
+            .get(source_offset..source_end)
+            .ok_or(JavaError::IndexOutOfBounds)?;
+        let destination = buffer
+            .get_mut(destination_offset..destination_end)
+            .ok_or(JavaError::IndexOutOfBounds)?;
+        for (slot, byte) in destination.iter_mut().zip(source) {
+            *slot = *byte as i8;
+        }
+        self.pos = self.pos.wrapping_add(copied as i32);
+        Ok(copied as i32)
+    }
+
+    /// `InputStream.skip(long)` with Java's exact `int` field arithmetic.
+    pub fn skip(&mut self, count: i64) -> i64 {
+        let mut skipped = i64::from(self.count.wrapping_sub(self.pos));
+        if count < skipped {
+            skipped = if count < 0 { 0 } else { count };
+        }
+        self.pos = i64::from(self.pos).wrapping_add(skipped) as i32;
+        skipped
+    }
+
+    /// `available()` -- the raw wrapping JVM `count - pos` expression.
+    pub fn available(&self) -> i32 {
+        self.count.wrapping_sub(self.pos)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.available() == 0
+        self.pos >= self.count
     }
 
-    fn take(&mut self, count: usize) -> JavaResult<&'a [u8]> {
-        let end = self
-            .position
-            .checked_add(count)
-            .ok_or_else(|| JavaError::Io("stream position overflow".to_string()))?;
-        if end > self.data.len() {
-            return Err(JavaError::Io("EOFException".to_string()));
+    /// `mark(readAheadLimit)`; the limit is ignored by this Java class.
+    pub fn mark(&mut self, _read_ahead_limit: i32) {
+        self.mark = self.pos;
+    }
+
+    /// `reset()`.
+    pub fn reset(&mut self) {
+        self.pos = self.mark;
+    }
+
+    pub const fn mark_supported(&self) -> bool {
+        true
+    }
+
+    /// `close()`; intentionally leaves every field untouched.
+    pub fn close(&mut self) {}
+
+    pub fn into_buffer(self) -> Vec<u8> {
+        self.buf
+    }
+}
+
+/// `java.io.DataInputStream` wrapping a `ByteArrayInputStream`.
+#[derive(Debug, Clone)]
+pub struct DataInputStream {
+    input: ByteArrayInputStream,
+}
+
+impl DataInputStream {
+    /// Convenience constructor that copies a host slice into an owned stream.
+    pub fn new(data: &[u8]) -> Self {
+        Self::from_stream(ByteArrayInputStream::from_slice(data))
+    }
+
+    /// Takes ownership of a byte vector without copying it.
+    pub fn from_bytes(data: Vec<u8>) -> Self {
+        Self::from_stream(ByteArrayInputStream::new(data))
+    }
+
+    /// Mirrors `new DataInputStream(input)` without introducing another cursor.
+    pub fn from_stream(input: ByteArrayInputStream) -> Self {
+        Self { input }
+    }
+
+    pub fn inner(&self) -> &ByteArrayInputStream {
+        &self.input
+    }
+
+    pub fn inner_mut(&mut self) -> &mut ByteArrayInputStream {
+        &mut self.input
+    }
+
+    pub fn into_inner(self) -> ByteArrayInputStream {
+        self.input
+    }
+
+    /// Bytes consumed so far. Useful for reporting where a parse failed.
+    pub fn position(&self) -> i32 {
+        self.input.position()
+    }
+
+    /// `available()`.
+    pub fn available(&self) -> i32 {
+        self.input.available()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.input.is_empty()
+    }
+
+    fn read_required(&mut self) -> JavaResult<u8> {
+        let value = self.input.read()?;
+        if value < 0 {
+            Err(eof())
+        } else {
+            Ok(value as u8)
         }
-        let slice = &self.data[self.position..end];
-        self.position = end;
-        Ok(slice)
     }
 
     /// `readByte()` -- signed.
     pub fn read_byte(&mut self) -> JavaResult<i8> {
-        Ok(self.take(1)?[0] as i8)
+        Ok(self.read_required()? as i8)
     }
 
     /// `readUnsignedByte()`.
     pub fn read_unsigned_byte(&mut self) -> JavaResult<i32> {
-        Ok(self.take(1)?[0] as i32)
+        Ok(i32::from(self.read_required()?))
     }
 
     /// `readBoolean()` -- any non-zero byte is true.
     pub fn read_boolean(&mut self) -> JavaResult<bool> {
-        Ok(self.take(1)?[0] != 0)
+        Ok(self.read_required()? != 0)
     }
 
     /// `readShort()` -- signed, big-endian.
     pub fn read_short(&mut self) -> JavaResult<i16> {
-        let bytes = self.take(2)?;
-        Ok(i16::from_be_bytes([bytes[0], bytes[1]]))
+        let first = self.read_required()?;
+        let second = self.read_required()?;
+        Ok(i16::from_be_bytes([first, second]))
     }
 
     /// `readUnsignedShort()`.
     pub fn read_unsigned_short(&mut self) -> JavaResult<i32> {
-        let bytes = self.take(2)?;
-        Ok(u16::from_be_bytes([bytes[0], bytes[1]]) as i32)
+        let first = self.read_required()?;
+        let second = self.read_required()?;
+        Ok(i32::from(u16::from_be_bytes([first, second])))
     }
 
     /// `readChar()` -- UTF-16 code unit.
     pub fn read_char(&mut self) -> JavaResult<u16> {
-        let bytes = self.take(2)?;
-        Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
+        let first = self.read_required()?;
+        let second = self.read_required()?;
+        Ok(u16::from_be_bytes([first, second]))
     }
 
     /// `readInt()` -- signed, big-endian.
     pub fn read_int(&mut self) -> JavaResult<i32> {
-        let bytes = self.take(4)?;
-        Ok(i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        let bytes = [
+            self.read_required()?,
+            self.read_required()?,
+            self.read_required()?,
+            self.read_required()?,
+        ];
+        Ok(i32::from_be_bytes(bytes))
     }
 
     /// `readLong()` -- signed, big-endian.
     pub fn read_long(&mut self) -> JavaResult<i64> {
-        let bytes = self.take(8)?;
-        Ok(i64::from_be_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-        ]))
+        let mut bytes = [0_i8; 8];
+        self.read_fully(&mut bytes)?;
+        Ok(i64::from_be_bytes(bytes.map(|byte| byte as u8)))
     }
 
     /// `readFloat()` -- IEEE 754 bits, big-endian.
@@ -136,48 +334,49 @@ impl<'a> DataInputStream<'a> {
     /// the silent-hill corpus). Malformed input raises `UTFDataFormatException`.
     pub fn read_utf(&mut self) -> JavaResult<Vec<u16>> {
         let length = self.read_unsigned_short()? as usize;
-        let bytes = self.take(length)?;
-        decode_modified_utf8(bytes)
+        let mut bytes = vec![0_i8; length];
+        self.read_fully(&mut bytes)?;
+        let bytes: Vec<u8> = bytes.into_iter().map(|byte| byte as u8).collect();
+        decode_modified_utf8(&bytes)
     }
 
     /// `read(byte[])`: fills the buffer and returns how many bytes were read.
     ///
-    /// Unlike `readFully`, a short read is not an error. A non-empty read at EOF
-    /// returns `-1`; a zero-length read returns `0` even at EOF.
+    /// Unlike `readFully`, a short read is not an error. Because the underlying
+    /// stream is a `ByteArrayInputStream`, even a zero-length read returns `-1`
+    /// at EOF; before EOF the same zero-length read returns `0`.
     pub fn read(&mut self, buffer: &mut [i8]) -> JavaResult<i32> {
-        if buffer.is_empty() {
-            return Ok(0);
-        }
-        let count = buffer.len().min(self.available());
-        if count == 0 {
-            return Ok(-1);
-        }
-        let bytes = self.take(count)?;
-        for (slot, byte) in buffer.iter_mut().zip(bytes) {
-            *slot = *byte as i8;
-        }
-        Ok(count as i32)
+        let length = i32::try_from(buffer.len()).expect("Java byte[] length exceeds i32::MAX");
+        self.input.read_range(buffer, 0, length)
     }
 
-    /// `readFully(byte[])`: errors unless the buffer can be filled completely.
+    /// `readFully(byte[])`; a short input consumes its available prefix before
+    /// raising `EOFException`.
     pub fn read_fully(&mut self, buffer: &mut [i8]) -> JavaResult<()> {
-        let bytes = self.take(buffer.len())?;
-        for (slot, byte) in buffer.iter_mut().zip(bytes) {
-            *slot = *byte as i8;
+        let length = i32::try_from(buffer.len()).expect("Java byte[] length exceeds i32::MAX");
+        let mut consumed = 0_i32;
+        while consumed < length {
+            let read = self
+                .input
+                .read_range(buffer, consumed, length.wrapping_sub(consumed))?;
+            if read < 0 {
+                return Err(eof());
+            }
+            consumed = consumed.wrapping_add(read);
         }
         Ok(())
     }
 
     /// Reads `count` signed bytes.
     pub fn read_bytes(&mut self, count: usize) -> JavaResult<Vec<i8>> {
-        Ok(self.take(count)?.iter().map(|byte| *byte as i8).collect())
+        let mut bytes = vec![0_i8; count];
+        self.read_fully(&mut bytes)?;
+        Ok(bytes)
     }
 
     /// `skip(n)`.
-    pub fn skip(&mut self, count: usize) -> JavaResult<usize> {
-        let skipped = count.min(self.available());
-        self.position += skipped;
-        Ok(skipped)
+    pub fn skip(&mut self, count: i64) -> JavaResult<i64> {
+        Ok(self.input.skip(count))
     }
 }
 
@@ -400,8 +599,8 @@ mod tests {
         let bytes = [0x01];
         let mut input = DataInputStream::new(&bytes);
         assert!(input.read_int().is_err());
-        // The failed read must not consume anything.
-        assert_eq!(input.available(), 1);
+        // DataInputStream consumes the available prefix before EOFException.
+        assert_eq!(input.available(), 0);
     }
 
     #[test]
@@ -479,8 +678,95 @@ mod tests {
         assert_eq!(input.read(&mut buffer).unwrap(), 2);
 
         let mut input = DataInputStream::new(&bytes);
-        let mut buffer = [0i8; 4];
+        let mut buffer = [-1i8; 4];
         assert!(input.read_fully(&mut buffer).is_err());
+        assert_eq!(buffer, [1, 2, -1, -1]);
+        assert_eq!(input.position(), 2);
+    }
+
+    #[test]
+    fn byte_array_input_stream_retains_exact_full_and_ranged_state() {
+        let bytes = vec![0, 1, 2, 3, 4];
+        let pointer = bytes.as_ptr();
+        let full = ByteArrayInputStream::new(bytes);
+        assert_eq!(full.buffer().as_ptr(), pointer);
+        assert_eq!(full.position(), 0);
+        assert_eq!(full.mark_position(), 0);
+        assert_eq!(full.count(), 5);
+        assert_eq!(full.available(), 5);
+
+        let mut ranged = ByteArrayInputStream::new_range(vec![0, 1, 2, 3, 4], 2, 2);
+        assert_eq!(ranged.position(), 2);
+        assert_eq!(ranged.mark_position(), 2);
+        assert_eq!(ranged.count(), 4);
+        assert_eq!(ranged.available(), 2);
+        assert_eq!(ranged.read().unwrap(), 2);
+        ranged.mark(123);
+        assert_eq!(ranged.read().unwrap(), 3);
+        assert_eq!(ranged.read().unwrap(), -1);
+        ranged.close();
+        ranged.reset();
+        assert_eq!(ranged.position(), 3);
+        assert_eq!(ranged.read().unwrap(), 3);
+    }
+
+    #[test]
+    fn byte_array_input_stream_bulk_read_preserves_java_eof_and_bounds_order() {
+        let mut before_eof = ByteArrayInputStream::new(vec![7]);
+        let mut empty = [];
+        assert_eq!(before_eof.read_range(&mut empty, 0, 0), Ok(0));
+
+        let mut at_eof = ByteArrayInputStream::new(vec![]);
+        assert_eq!(at_eof.read_range(&mut empty, 0, 0), Ok(-1));
+        assert_eq!(
+            at_eof.read_range(&mut empty, 1, 0),
+            Err(JavaError::IndexOutOfBounds)
+        );
+
+        let mut stream = ByteArrayInputStream::new_range(vec![0, 0x80, 0xff, 4], 1, 2);
+        let mut destination = [-7_i8; 5];
+        assert_eq!(stream.read_range(&mut destination, 2, 3), Ok(2));
+        assert_eq!(destination, [-7, -7, -128, -1, -7]);
+        assert_eq!(stream.position(), 3);
+        assert_eq!(stream.read_range(&mut destination, 0, 1), Ok(-1));
+    }
+
+    #[test]
+    fn byte_array_input_stream_preserves_hostile_constructor_arithmetic() {
+        let mut negative = ByteArrayInputStream::new_range(vec![10, 11, 12], -1, 2);
+        assert_eq!(negative.position(), -1);
+        assert_eq!(negative.mark_position(), -1);
+        assert_eq!(negative.count(), 1);
+        assert_eq!(negative.available(), 2);
+        assert_eq!(
+            negative.read(),
+            Err(JavaError::ArrayIndexOutOfBounds {
+                index: -1,
+                length: 3,
+            })
+        );
+        // `buf[pos++]` advances before the failing JVM bounds check.
+        assert_eq!(negative.position(), 0);
+
+        let mut past_end = ByteArrayInputStream::new_range(vec![1, 2, 3], 5, 0);
+        assert_eq!(past_end.available(), -2);
+        assert_eq!(past_end.read(), Ok(-1));
+        assert_eq!(past_end.skip(1), -2);
+        assert_eq!(past_end.position(), 3);
+    }
+
+    #[test]
+    fn data_input_stream_owns_and_returns_the_same_cursor() {
+        let bytes = vec![0x12, 0x34, 0x56];
+        let pointer = bytes.as_ptr();
+        let stream = ByteArrayInputStream::new(bytes);
+        let mut input = DataInputStream::from_stream(stream);
+        assert_eq!(input.inner().buffer().as_ptr(), pointer);
+        assert_eq!(input.read_unsigned_short(), Ok(0x1234));
+        let stream = input.into_inner();
+        assert_eq!(stream.buffer().as_ptr(), pointer);
+        assert_eq!(stream.position(), 2);
+        assert_eq!(stream.available(), 1);
     }
 
     #[test]
