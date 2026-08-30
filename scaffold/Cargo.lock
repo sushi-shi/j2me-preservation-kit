@@ -68,17 +68,17 @@ dependencies = [
 [[package]]
 name = "j2me-canvas"
 version = "0.1.0"
-source = "git+https://github.com/sushi-shi/j2me-preservation-kit.git?rev=dff1ce328cb02ba2cd0324ebdd85189e74a59552#dff1ce328cb02ba2cd0324ebdd85189e74a59552"
+source = "git+https://github.com/sushi-shi/j2me-preservation-kit.git?rev=c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc#c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc"
 
 [[package]]
 name = "j2me-jvm"
 version = "0.1.0"
-source = "git+https://github.com/sushi-shi/j2me-preservation-kit.git?rev=dff1ce328cb02ba2cd0324ebdd85189e74a59552#dff1ce328cb02ba2cd0324ebdd85189e74a59552"
+source = "git+https://github.com/sushi-shi/j2me-preservation-kit.git?rev=c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc#c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc"
 
 [[package]]
 name = "j2me-me"
 version = "0.1.0"
-source = "git+https://github.com/sushi-shi/j2me-preservation-kit.git?rev=dff1ce328cb02ba2cd0324ebdd85189e74a59552#dff1ce328cb02ba2cd0324ebdd85189e74a59552"
+source = "git+https://github.com/sushi-shi/j2me-preservation-kit.git?rev=c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc#c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc"
 dependencies = [
  "j2me-canvas",
  "j2me-jvm",

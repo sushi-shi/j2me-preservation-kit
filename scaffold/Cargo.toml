@@ -14,8 +14,8 @@ rust-version = "1.75"
 [workspace.dependencies]
 # Portable runtime authority. Every generated game consumes one immutable,
 # public revision; it never receives a copied `crates/j2me-*` source tree.
-j2me-jvm = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "dff1ce328cb02ba2cd0324ebdd85189e74a59552" }
-j2me-me = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "dff1ce328cb02ba2cd0324ebdd85189e74a59552" }
+j2me-jvm = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
+j2me-me = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "c4ee0943acd3aadb8c5c26f20f25941eb7cb43bc" }
 quote = "1"
 syn = { version = "2", features = ["full", "visit"] }
 
