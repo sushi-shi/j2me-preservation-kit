@@ -7,6 +7,19 @@ fork = "__FORK__"                      # 2d (Graphics2D) or 3d (M3G); see the
 resources_env = "__RESOURCES_ENV__"    # env-var fallback for the PRIVATE resources
                                        # location (never a real path in the repo)
 
+# Phase 1/2 facts consumed by the reusable corpus and canonical-Java tools.
+# Fill these only after selecting and classifying the baseline. Zero/empty
+# placeholders deliberately make the later gates fail rather than bless a
+# vacuous recovery.
+[java]
+baseline_classes = []
+expected_method_count = 0
+minimum_numeric_opcodes = 0
+minimum_methods_with_numeric_opcodes = 0
+canonical_midlet = ""
+canonical_class_entries = []
+minimum_jar_entries = 0
+
 # ---------------------------------------------------------------------------
 # [oracle] — the ONLY per-game knobs of the FreeJ2ME-Plus reference frame oracle
 # (tools/oracle/{capture_reference.sh, HeadlessCapture.java, compare_frames.py}).

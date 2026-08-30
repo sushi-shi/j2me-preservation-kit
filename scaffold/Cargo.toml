@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "transliteration/game-xlat",
+    "tools/ast/j2me-ast-audit",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "CC0-1.0"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Portable runtime authority. Every generated game consumes one immutable,
+# public revision; it never receives a copied `crates/j2me-*` source tree.
+j2me-jvm = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "dff1ce328cb02ba2cd0324ebdd85189e74a59552" }
+j2me-me = { git = "https://github.com/sushi-shi/j2me-preservation-kit.git", rev = "dff1ce328cb02ba2cd0324ebdd85189e74a59552" }
+quote = "1"
+syn = { version = "2", features = ["full", "visit"] }
+
+[profile.dev]
+overflow-checks = true
+
+[profile.release]
+opt-level = 3

@@ -51,6 +51,17 @@ only game facts and adapters local: recovered hashes/builds, canonical game
 source, semantic mappings, variant exclusions, oracle vectors, and per-node
 crosswalk rows.
 
+`_template` itself owns and tests the portable `j2me-*` crate sources. The home
+generator deliberately excludes those source directories when stamping a game
+and emits a consumer `Cargo.toml` from `scaffold/`, pinned by public Git URL and
+exact revision. Generated games must never carry copied portable crate trees.
+
+The scaffold also carries the reusable byte-level corpus classifier, content
+resource catalog, dual-decompiler driver, numeric-opcode authority, canonical
+Java compiler/packager, and Java ME API stubs. Their game-specific facts live in
+`game.toml [java]`; empty Phase-0 values intentionally keep Phase-2 checks red
+until a baseline and canonical class closure have been reviewed.
+
 ## License
 
 The original work authored for this repository is dedicated to the public

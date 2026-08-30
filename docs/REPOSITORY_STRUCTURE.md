@@ -18,9 +18,9 @@ literal copied binaries. See the j2me home's `PLAYBOOK.md` for the method.
 ## Boundary rules (fill in as phases land)
 
 - The root `Cargo.toml` is the only workspace manifest; one `target/`, one lock.
-- `crates/j2me-{jvm,canvas,me}` are the shared, ordinary-`std` implementation
-  copied from the home template. `crates/j2me-codec` is the deliberately
-  `no_std` serialization layer.
+- In this preservation-kit repository, `crates/j2me-*` are the canonical
+  portable sources. `new-game.py` excludes them from generated games and emits
+  Git dependencies pinned to one immutable public revision instead.
 - `transliteration/game-xlat` (Phase 3) is the per-game executable spec, not the
   shipped engine — production code must not depend on it at runtime; tests may
   (R12). Transliteration is not constrained to `no_std`.
@@ -37,7 +37,7 @@ _originals/            immutable surviving jars/zips (git-ignored, sha256-verifi
 _reference/            generated catalogs & fingerprints (git-ignored, regenerable)
 java/reconstruction/   builds.toml (provenance), symbols.toml, variants — ledgers
 transliteration/       per-game game-xlat executable spec and adapters
-crates/                reusable j2me-codec/jvm/canvas/me + game engine crates
+crates/                canonical portable j2me-* sources (kit repo only)
 apps/                  native desktop host, play/site exporters, web frontend
 tools/                 originals/, AST walkers/crosswalk, line oracle, workflows
 docs/                  REPOSITORY_STRUCTURE, GATES, FORMATS, STATUS (+ more)

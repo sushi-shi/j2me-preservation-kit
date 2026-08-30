@@ -1,0 +1,14 @@
+[package]
+name = "__SLUG__-game-xlat"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Strict Java-to-Rust transliteration of __TITLE__"
+publish = false
+
+[lib]
+name = "game_xlat"
+
+[dependencies]
+j2me-jvm.workspace = true
+j2me-me.workspace = true

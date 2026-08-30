@@ -1,0 +1,61 @@
+schema_version = 1
+project_root = "../.."
+state_file = "target/gates/affected-state.json"
+
+[[gate]]
+name = "originals"
+description = "Surviving binaries or provenance changed."
+inputs = [
+  "_originals",
+  "java/reconstruction/builds.toml",
+  "tools/originals/**/*.py",
+]
+commands = [
+  ["just", "originals-verify"],
+  ["just", "originals-verify-canfail"],
+]
+
+[[gate]]
+name = "corpus"
+description = "Build provenance, bytecode fingerprints, or resources changed."
+inputs = [
+  "_originals",
+  "java/reconstruction/builds.toml",
+  "tools/corpus/**/*.py",
+]
+commands = [
+  ["just", "classify"],
+  ["just", "classify-canfail"],
+  ["just", "catalog"],
+  ["just", "catalog-canfail"],
+]
+
+[[gate]]
+name = "oracle-ast-harnesses"
+description = "Reusable oracle or exhaustive AST ownership tooling changed."
+inputs = [
+  "tools/oracle",
+  "tools/ast",
+  "tools/tests",
+]
+commands = [
+  ["just", "oracle-harness-canfail"],
+  ["just", "crosswalk-check"],
+  ["just", "crosswalk-canfail"],
+  ["just", "crosswalk-fixture-canfail"],
+]
+
+[[gate]]
+name = "rust"
+description = "Pinned runtime dependency or transliteration scaffold changed."
+inputs = [
+  "Cargo.toml",
+  "Cargo.lock",
+  "transliteration/**/*.toml",
+  "transliteration/**/*.rs",
+]
+commands = [
+  ["cargo", "fmt", "--all", "--check"],
+  ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"],
+  ["cargo", "test", "--workspace"],
+]

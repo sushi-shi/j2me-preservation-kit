@@ -39,6 +39,9 @@ crosswalk rows.
 
 Generated games are standalone repositories. Stamp reusable sources into them;
 do not make their builds depend on `../_template` or a network checkout.
+Portable Rust crates are the exception to source stamping: generated games
+consume their published Git repository at an exact `rev`, and must not receive
+copies of `_template/crates/j2me-*`.
 
 ## Recovery authority
 
