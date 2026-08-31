@@ -56,6 +56,7 @@
 //! explicitly, with exact `Thread.currentThread()` identity and one-shot start
 //! semantics, rather than introducing nondeterministic native threads.
 
+pub mod array;
 pub mod io;
 pub mod math;
 pub mod object;

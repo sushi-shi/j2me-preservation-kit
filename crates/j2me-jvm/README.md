@@ -49,6 +49,11 @@ and virtual `Object.equals` stay behind `JavaObjectRuntime`. This preserves
 aliases, constructor identity, callback failure cuts, and dynamic dispatch
 without adding a partial VM or treating Java objects as Rust values.
 
+Its same-component array layer exposes both distinct-array and identical-array
+forms of `System.arraycopy`. The helpers check complete source and destination
+ranges before mutation, preserve null/bounds failures, and give overlapping
+identity copies Java's memmove behavior.
+
 ## Usage
 
 ```rust
